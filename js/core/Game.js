@@ -1,0 +1,1426 @@
+/**
+ * Game.js
+ * ゲーム全体の統括。各マネージャ（入力・シーン・ループ）を保持し、
+ * データ(GameData)への参照を各シーンへ橋渡しする。
+ */
+(function (NS) {
+  "use strict";
+
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {MyGame.GameData} gameData
+   * @param {MyGame.AssetLoader} assets スプライト等の描画物
+   */
+  function Game(canvas, gameData, assets) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.data = gameData;
+    this.assets = assets;
+
+    // プレイヤー設定。画面をまたいで保持し、中身はセーブファイルごとに切り替わる
+    // （ファイルを選ぶまでは、最後に遊んだファイルの設定）
+    this.settings = new NS.SettingsManager(gameData);
+    // キャンバスを渡すことで、マウス操作も受け取れるようにする。
+    // 設定も渡すことで、ホイールの速さが設定画面の値に従う
+    this.input = new NS.Input(gameData.keys, canvas, this.settings);
+    // 画面の切り替えを暗転でつなぐ（長さと色は data/ui.js の transition）
+    this.scenes = new NS.SceneManager((gameData.ui || {}).transition);
+    this.loop = new NS.GameLoop(this._update.bind(this), this._render.bind(this));
+
+    // セーブの窓口。どの画面からでも同じ中身で書き出せるよう、ここで1つだけ持つ
+    // （画面ごとに保存する項目を書き並べていたころは、項目を増やすと入れ忘れが起きた）
+    this.saveManager = new NS.SaveManager(gameData);
+    this._migrateSettings();
+
+    // 初めての場面で出す説明。どの画面からも同じ記録を見るので、ここで1つだけ持つ
+    this.tutorial = new NS.TutorialSystem(gameData, this.settings);
+    // 物語の場面。見た記録はチュートリアルと同じくセーブファイルごと
+    this.story = new NS.StorySystem(gameData);
+
+    // 音。画面をまたいでBGMを流し続けるので、ここで1つだけ持つ
+    this.audio = new NS.AudioManager(gameData, this.settings);
+    // スマホは操作の最中に音を許してもらう必要があるので、触ったその場で解除する（v1.7.0）
+    var audio = this.audio;
+    this.input.onGesture = function () { audio.unlock(); };
+
+    // 起動からの経過ミリ秒。絵の動き（MyGame.Motion）が参照する共通の時計。
+    // シーンごとに時間を数えなくて済むよう、ここで1つだけ持つ。
+    this.clock = 0;
+
+    // そのセーブファイルの合計プレイ時間（ミリ秒）。セーブファイル選択の一覧に出す。
+    //   clock と分けてあるのは、clock が「起動してからの時間」で
+    //   ファイルをまたいで進み続けるため。こちらは読み込むとその値に戻る。
+    //   新しく始めたときは 0 から（Game.startNewGame）
+    this.playTime = 0;
+
+    // ドット絵をぼかさずに描画する
+    this.ctx.imageSmoothingEnabled = false;
+  }
+
+  /**
+   * いま遊んでいるセーブファイルを決める。
+   *
+   * ★ 保存の入口は saveProgress() ひとつなので、ここで向き先を変えておけば、
+   *   拠点のセーブも探索中のセーブも初クリアの自動セーブも、
+   *   すべて同じファイルへ書かれる。呼び出し側は何も知らなくてよい。
+   *
+   * @param {number} slot 1〜（data/save.js の slotCount）
+   */
+  Game.prototype.setSaveSlot = function (slot) {
+    var n = this.saveManager.setSlot(slot);
+    // 設定の書き先も同じファイルへ向ける。値は変えない
+    // （拠点で別のファイルへセーブしたら、いまの設定ごとそちらへ移る）
+    this.settings.bindFile(this.saveManager.settingsKeyFor(n));
+    return n;
+  };
+
+  // --- 設定はセーブファイルごと（SettingsManager の冒頭を参照） ---
+
+  /** いまのファイルの設定を読む（続きから・中断から） */
+  Game.prototype.loadFileSettings = function () {
+    this.settings.useFile(this.saveManager.settingsKeyFor(this.saveManager.slot));
+    this.audio.applyVolume();
+  };
+
+  /** 新しく始めたファイルの設定。既定値から（書くのは最初のセーブのとき） */
+  Game.prototype.resetFileSettings = function () {
+    this.settings.useNewFile(this.saveManager.settingsKeyFor(this.saveManager.slot));
+    this.audio.applyVolume();
+  };
+
+  /** タイトルに戻ったとき。最後に遊んだファイルの設定にする */
+  Game.prototype.useTitleSettings = function () {
+    this.settings.useShared();
+    this.audio.applyVolume();
+  };
+
+  /**
+   * ファイルごとに分ける前の共通の設定を、中身のあるファイルへ写す（起動時に1回）。
+   * 写さないと、分ける前から遊んでいたファイルの音量などが既定値に戻ってしまう
+   */
+  Game.prototype._migrateSettings = function () {
+    var keys = [];
+    for (var i = 1; i <= this.saveManager.slotCount; i++) {
+      if (this.saveManager.hasSave(i) || this.saveManager.hasSuspend(i)) {
+        keys.push(this.saveManager.settingsKeyFor(i));
+      }
+    }
+    this.settings.migrateShared(keys);
+  };
+
+  /** いま遊んでいるセーブファイルの番号 */
+  Game.prototype.getSaveSlot = function () {
+    return this.saveManager.slot;
+  };
+
+  /**
+   * 進行データ（パーティ・持ち物・発見記録）が無ければ初期状態を用意する。
+   * 拠点・探索のどちらから始めても同じ状態になるよう、ここに集約している。
+   * 既にあるものはそのまま残す（セーブから復元した場合など）。
+   */
+  /**
+   * 主人公の名前。決めていなければ data/player.js の defaultName。
+   *
+   * ★ セーブファイルごとに別々。設定（SettingsManager）に持たせていないのは、
+   *   3つのファイルで別の冒険をしているのに、名前だけ共通になってしまうため。
+   */
+  Game.prototype.getPlayerName = function () {
+    return this.playerName || (this.data.player || {}).defaultName || "";
+  };
+
+  /** 主人公の服の色。無い色を指していたら既定の色に落とす */
+  Game.prototype.getPlayerColor = function () {
+    if (!NS.PlayerLook) return this.playerColor || null;
+    return NS.PlayerLook.resolveColorId(this.data, this.playerColor);
+  };
+
+  /**
+   * 主人公の性別（data/player.js の genders の id）。無い id なら既定に落とす。
+   * ★ ゲームの進み方には何も影響しない。選んだものを覚えておくだけ
+   */
+  Game.prototype.getPlayerGender = function () {
+    var player = this.data.player || {};
+    var list = player.genders || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === this.playerGender) return this.playerGender;
+    }
+    return player.defaultGender || (list[0] ? list[0].id : null);
+  };
+
+  /** 主人公の一人称。物語の台詞の {me} に差し込まれる */
+  Game.prototype.getPlayerFirstPerson = function () {
+    var player = this.data.player || {};
+    var list = player.firstPersons || [];
+    if (this.playerFirstPerson && list.indexOf(this.playerFirstPerson) >= 0) return this.playerFirstPerson;
+    return player.defaultFirstPerson || list[0] || "";
+  };
+
+  Game.prototype.ensureProgress = function () {
+    var random = new NS.Random();
+
+    if (!this.party || this.party.isEmpty()) {
+      this.party = NS.Party.createStarting(this.data, random);
+    }
+    if (!this.inventory) {
+      this.inventory = NS.Inventory.createStarting(this.data);
+    }
+    if (!this.storage) {
+      this.storage = new NS.MonsterStorage((this.data.config || {}).storageMax);
+    }
+    if (!this.discovery) {
+      this.discovery = new NS.Discovery();
+    }
+    if (!this.clearedDungeons) {
+      this.clearedDungeons = {};
+    }
+    if (!this.boughtBlessings) {
+      this.boughtBlessings = {};
+    }
+    if (!this.offBlessings) {
+      this.offBlessings = {};
+    }
+    if (!this.doneEvents) {
+      this.doneEvents = {};
+    }
+    if (typeof this.gold !== "number") {
+      this.gold = (this.data.player || {}).startingGold || 0;
+    }
+    this._ensurePartner();
+    this._recordInitialDiscoveries();
+  };
+
+  /**
+   * 「最初の相棒」の印が誰にも付いていなければ付け直す。
+   *
+   * 印は後から足したので、古いセーブには無い。最初の仲間は種族が決まっている
+   * （data/player.js の starterMonsters の先頭。いまはスライム）ので、
+   * その種族のうち、連れている仲間の並びで最初の1体 → 無ければ預かり所の最初の1体を相棒とみなす。
+   * 一度付けばセーブに残るので、以後は動かない。
+   */
+  Game.prototype._ensurePartner = function () {
+    if (!this.party || !this.storage) return;
+    var lists = [this.party.getMembers(), this.storage.getMembers()];
+    var i, j;
+
+    for (i = 0; i < lists.length; i++) {
+      for (j = 0; j < lists[i].length; j++) {
+        if (lists[i][j].partner) return;
+      }
+    }
+
+    var first = ((this.data.player || {}).starterMonsters || [])[0];
+    if (!first) return;
+    for (i = 0; i < lists.length; i++) {
+      for (j = 0; j < lists[i].length; j++) {
+        if (lists[i][j].speciesId === first.species) {
+          lists[i][j].partner = true;
+          return;
+        }
+      }
+    }
+  };
+
+  /**
+   * いまの進行状況を書き出す。
+   *
+   * 保存する中身をここ1か所にまとめてあるので、
+   * 持ち物や加護のように「挑戦をまたいで残るもの」を増やしても、
+   * 画面ごとに書き足す必要がない。
+   *
+   * @param {object} [dungeonState] 探索中に呼ぶときだけ渡す。
+   *   { dungeonId, floor, rows, playerCol, playerRow } —— 同じ場所から再開するために使う。
+   *   dungeonId は再開には要らないが、セーブファイルの一覧に
+   *   「苔むす坑道 B2F」と出すために持っておく。
+   *   省略すると「拠点にいる」状態として保存する（マップは持たない）
+   * @returns {{success:boolean, reason:string}}
+   */
+  Game.prototype.saveProgress = function (dungeonState) {
+    var result = this.saveManager.save({
+      floor: (dungeonState && dungeonState.floor) || 1,
+      party: this.party,
+      storage: this.storage,
+      inventory: this.inventory,
+      gold: this.gold,
+      discovery: this.discovery,
+      tutorial: this.tutorial,
+      story: this.story,
+      // 主人公の名前・見た目・性別・一人称。冒険ごとに違うのでセーブに入れる
+      playerName: this.playerName,
+      playerColor: this.playerColor,
+      playerPants: this.playerPants,
+      playerHair: this.playerHair,
+      playerHairColor: this.playerHairColor,
+      playerAcc: this.playerAcc,
+      playerAccColor: this.playerAccColor,
+      playerGender: this.playerGender,
+      playerFirstPerson: this.playerFirstPerson,
+      // 一度きりの出来事（ヨミリュウの待ち伏せなど）を済ませたか
+      doneEvents: this.doneEvents,
+      clearedDungeons: this.clearedDungeons,
+      boughtBlessings: this.boughtBlessings,
+      offBlessings: this.offBlessings,
+      // 拠点のメニューの印（新入荷・NEW）を出すために、店と図鑑で何を見たか（HomeScene）
+      homeSeen: this.homeSeen,
+      playTime: this.playTime,
+      dungeon: dungeonState ? {
+        dungeonId: dungeonState.dungeonId || null,
+        rows: dungeonState.rows,
+        playerCol: dungeonState.playerCol,
+        playerRow: dungeonState.playerRow
+      } : null
+    });
+    // 設定も一緒に書く。チュートリアルを Esc で止めたときのように、
+    // 設定画面を通らずに変わった値も、セーブすればそのファイルに残る
+    if (result.success) this.settings.save();
+    return result;
+  };
+
+  /**
+   * 探索を中断する。いまの状態を「中断データ」に書く（セーブ本体は書き換えない）。
+   *
+   * セーブと違って、挑戦の記録（選んだ加護・拾ったもの）と
+   * その階の仕掛け（開けた宝箱など）まで書く。
+   * 再開したときに、加護が消えていたり宝箱が復活していたりしないように。
+   *
+   * @param {object} dungeonState saveProgress と同じ { dungeonId, floor, rows, playerCol, playerRow }
+   * @param {object[]} features その階の仕掛け（DungeonScene.placedFeatures）
+   * @returns {{success:boolean, reason:string}}
+   */
+  Game.prototype.suspendRun = function (dungeonState, features) {
+    var run = this.run;
+    var members = this.party ? this.party.getMembers() : [];
+    var runData = null;
+
+    if (run) {
+      var blessingIds = [];
+      for (var i = 0; i < run.blessings.length; i++) blessingIds.push(run.blessings[i].id);
+
+      // そのランで仲間になった個体は、パーティの何番目かで覚える
+      var gainedIndexes = [];
+      for (var j = 0; j < run.gainedMonsters.length; j++) {
+        var index = members.indexOf(run.gainedMonsters[j]);
+        if (index >= 0) gainedIndexes.push(index);
+      }
+
+      runData = {
+        gainedItems: run.gainedItems,
+        gainedMonsters: gainedIndexes,
+        gainedGold: run.gainedGold,
+        blessings: blessingIds,
+        deepestFloor: run.deepestFloor
+      };
+    }
+
+    var featureData = [];
+    for (var k = 0; k < (features || []).length; k++) {
+      var f = features[k];
+      // contents … 中身の決まった宝箱（fixedChests）。中断して再開しても同じ中身のまま
+      featureData.push({ col: f.col, row: f.row, type: f.type, used: !!f.used, revealed: !!f.revealed,
+                         contents: f.contents || null });
+    }
+
+    var result = this.saveManager.saveSuspend({
+      floor: dungeonState.floor,
+      party: this.party,
+      storage: this.storage,
+      inventory: this.inventory,
+      gold: this.gold,
+      discovery: this.discovery,
+      tutorial: this.tutorial,
+      story: this.story,
+      playerName: this.playerName,
+      playerColor: this.playerColor,
+      playerPants: this.playerPants,
+      playerHair: this.playerHair,
+      playerHairColor: this.playerHairColor,
+      playerAcc: this.playerAcc,
+      playerAccColor: this.playerAccColor,
+      playerGender: this.playerGender,
+      playerFirstPerson: this.playerFirstPerson,
+      doneEvents: this.doneEvents,
+      clearedDungeons: this.clearedDungeons,
+      boughtBlessings: this.boughtBlessings,
+      offBlessings: this.offBlessings,
+      homeSeen: this.homeSeen,
+      playTime: this.playTime,
+      dungeon: {
+        dungeonId: dungeonState.dungeonId || null,
+        rows: dungeonState.rows,
+        playerCol: dungeonState.playerCol,
+        playerRow: dungeonState.playerRow
+      },
+      run: runData,
+      features: featureData
+    });
+    if (result.success) this.settings.save();   // saveProgress と同じ
+    return result;
+  };
+
+  /**
+   * 読み込んだ状態を、遊べる形でこの Game に入れる。
+   * 「続きから」と「中断したところから」の両方がここを通る。
+   * @param {object} state SaveManager.load / loadSuspend の state
+   */
+  Game.prototype.applyLoadedState = function (state) {
+    this.party = state.party;
+    this.storage = state.storage;
+    this.inventory = state.inventory;
+    // 上限（v1.4.4）より前のセーブで超えていても、上限にそろえる
+    this.gold = Math.min(state.gold || 0, this.getMaxGold());
+    this.discovery = state.discovery;
+    // 名前と色。古いセーブには無いので、その場合は既定のまま
+    this.playerName = state.playerName || null;
+    this.playerColor = state.playerColor || null;
+    // 新しい絵の見た目（v1.2.0）。無ければ data/player.js の既定（defaultPants など。飾りは無し）
+    this.playerPants = state.playerPants || null;
+    this.playerHair = state.playerHair || null;
+    this.playerHairColor = state.playerHairColor || null;
+    this.playerAcc = state.playerAcc || null;
+    this.playerAccColor = state.playerAccColor || null;
+    // 性別・一人称。古いセーブには無いので、その場合は既定（data/player.js）
+    this.playerGender = state.playerGender || null;
+    this.playerFirstPerson = state.playerFirstPerson || null;
+    this.doneEvents = state.doneEvents || {};
+    // この仕組みより前のセーブは「全部もう見た」扱いにする
+    this.tutorial.loadSaveData(state.tutorial, true);
+    // 物語も同じ。この仕組みより前のセーブにオープニングを見せない
+    this.story.loadSaveData(state.story, true);
+    this.clearedDungeons = state.clearedDungeons || {};
+    this.boughtBlessings = state.boughtBlessings || {};
+    this.offBlessings = state.offBlessings || {};
+    // 古いセーブには無い。null のままにしておくと、拠点を開いたときに
+    // 「いま並んでいるものは全部見た」として始まる（いきなり印だらけにならないように）
+    this.homeSeen = state.homeSeen || null;
+    // 合計プレイ時間は、そのファイルに書いてあった値から続ける（古いセーブには無いので0）
+    this.playTime = state.playTime || 0;
+    this.run = null;
+  };
+
+  /**
+   * 中断したところから再開する。
+   *
+   * 読めたら中断データを消してから探索画面へ移る（同じところから何度もやり直せない）。
+   * 読めなかったときは何も変えず、理由を返す。
+   *
+   * @param {number} slot
+   * @returns {{success:boolean, reason:string}}
+   */
+  Game.prototype.resumeSuspended = function (slot) {
+    this.setSaveSlot(slot);
+    var result = this.saveManager.loadSuspend();
+    if (!result.success) return { success: false, reason: result.reason };
+
+    var state = result.state;
+    var dungeonId = state.dungeon && state.dungeon.dungeonId;
+    var def = dungeonId ? (this.data.dungeons || {})[dungeonId] : null;
+    if (!def) return { success: false, reason: "broken" };
+
+    this.applyLoadedState(state);
+    this.loadFileSettings();
+    this.beginRun(def);
+
+    // 挑戦の記録を戻す。加護は id から定義を引き直す
+    var saved = state.run || {};
+    var run = this.run;
+    var blessings = this.data.blessings || {};
+    for (var i = 0; i < (saved.blessings || []).length; i++) {
+      if (blessings[saved.blessings[i]]) run.addBlessing(blessings[saved.blessings[i]]);
+    }
+    run.gainedItems = saved.gainedItems || {};
+    run.gainedGold = saved.gainedGold || 0;
+    run.deepestFloor = saved.deepestFloor || state.floor || 1;
+    var members = this.party.getMembers();
+    for (var j = 0; j < (saved.gainedMonsters || []).length; j++) {
+      if (members[saved.gainedMonsters[j]]) run.recordMonster(members[saved.gainedMonsters[j]]);
+    }
+    this._refreshRunEffects();
+
+    this.saveManager.clearSuspend(slot);
+    this.scenes.change(new NS.DungeonScene(this, def, state));
+    return { success: true, reason: "resumed" };
+  };
+
+  /**
+   * ダンジョンをクリア済みとして記録する。
+   * 次のダンジョンの解放条件に使う。
+   * @param {string} dungeonId
+   * @returns {boolean} 今回はじめてクリアしたか（すでにクリア済みなら false）
+   */
+  Game.prototype.markDungeonCleared = function (dungeonId) {
+    if (!dungeonId) return false;
+    if (!this.clearedDungeons) this.clearedDungeons = {};
+    if (this.clearedDungeons[dungeonId]) return false;
+
+    this.clearedDungeons[dungeonId] = true;
+    return true;
+  };
+
+  Game.prototype.isDungeonCleared = function (dungeonId) {
+    return !!(this.clearedDungeons && this.clearedDungeons[dungeonId]);
+  };
+
+  // --- 一度きりの出来事（data/dungeons.js の events）---
+
+  Game.prototype.isEventDone = function (eventId) {
+    return !!(this.doneEvents && this.doneEvents[eventId]);
+  };
+
+  /** 済ませた印を付ける。起きた瞬間に付けるので、逃げても負けても二度は起きない */
+  Game.prototype.markEventDone = function (eventId) {
+    if (!eventId) return;
+    if (!this.doneEvents) this.doneEvents = {};
+    this.doneEvents[eventId] = true;
+  };
+
+  /**
+   * 出来事の戦いの結果を残す（"win" / "lose" / "flee" / "scouted"。BattleSystem の結果そのまま）。
+   * 物語の場面を結果で分けるのに使う（data/story.js の when.result）。
+   * 印は true のかわりに結果の文字が入るだけなので、「済ませたか」の判定はそのまま効く
+   */
+  Game.prototype.setEventResult = function (eventId, result) {
+    if (!eventId || !result) return;
+    if (!this.doneEvents) this.doneEvents = {};
+    this.doneEvents[eventId] = result;
+  };
+
+  /** 出来事の戦いの結果（残っていなければ null） */
+  Game.prototype.getEventResult = function (eventId) {
+    var value = this.doneEvents && this.doneEvents[eventId];
+    return (typeof value === "string") ? value : null;
+  };
+
+  // --- 加護の持ち物（挑戦をまたいで残る） ---
+  //
+  // data/blessings.js に locked: true と書いた加護は、最初は選択肢に出ない。
+  // 謎の商人から買うと恒久的に解放される（boughtBlessings）。
+  // 解放済みの加護は、拠点の画面で1つずつ外せる（offBlessings）。
+  // どちらも「持っているダンジョン」と同じく { id: true } の形で保存する。
+
+  /** 加護を買った（恒久解放）ものとして記録する */
+  Game.prototype.markBlessingBought = function (blessingId) {
+    if (!blessingId) return;
+    if (!this.boughtBlessings) this.boughtBlessings = {};
+    this.boughtBlessings[blessingId] = true;
+  };
+
+  Game.prototype.hasBoughtBlessing = function (blessingId) {
+    return !!(this.boughtBlessings && this.boughtBlessings[blessingId]);
+  };
+
+  /**
+   * その加護を持っているか（選択肢に出しうるか）。
+   * 最初から使えるものは買わなくても持っている扱い。
+   */
+  Game.prototype.ownsBlessing = function (blessingId) {
+    var blessing = (this.data.blessings || {})[blessingId];
+    if (!blessing) return false;
+    return blessing.locked ? this.hasBoughtBlessing(blessingId) : true;
+  };
+
+  /** 持っている加護のid一覧（買ったものと、最初から使えるもの） */
+  Game.prototype.getOwnedBlessingIds = function () {
+    var blessings = this.data.blessings || {};
+    var ids = [];
+
+    for (var id in blessings) {
+      if (!Object.prototype.hasOwnProperty.call(blessings, id)) continue;
+      if (this.ownsBlessing(id)) ids.push(id);
+    }
+    return ids;
+  };
+
+  /** いま選択肢に入れている加護の数 */
+  Game.prototype.countActiveBlessings = function () {
+    var ids = this.getOwnedBlessingIds();
+    var count = 0;
+
+    for (var i = 0; i < ids.length; i++) {
+      if (this.isBlessingActive(ids[i])) count++;
+    }
+    return count;
+  };
+
+  /** 選択肢に入れておける数の上限（data/run.js の blessing.activeMax） */
+  Game.prototype.getBlessingActiveMax = function () {
+    var max = (((this.data.run || {}).blessing) || {}).activeMax;
+    return (typeof max === "number") ? max : Infinity;
+  };
+
+  /**
+   * 選択肢に出す／出さないを切り替える。
+   *
+   * 入れられるのは上限まで。いっぱいのときに入れようとしても何も起きない
+   * （どれかを外してから入れ直す）。
+   *
+   * @returns {{changed:boolean, active:boolean, reason:string}}
+   *   reason: "on" | "off" | "full"
+   */
+  Game.prototype.toggleBlessing = function (blessingId) {
+    if (!this.ownsBlessing(blessingId)) {
+      return { changed: false, active: false, reason: "notOwned" };
+    }
+    if (!this.offBlessings) this.offBlessings = {};
+
+    if (this.offBlessings[blessingId]) {
+      if (this.countActiveBlessings() >= this.getBlessingActiveMax()) {
+        return { changed: false, active: false, reason: "full" };
+      }
+      delete this.offBlessings[blessingId];
+      return { changed: true, active: true, reason: "on" };
+    }
+
+    this.offBlessings[blessingId] = true;
+    return { changed: true, active: false, reason: "off" };
+  };
+
+  /**
+   * 加護を買う。買った加護は自動では選択肢に入れない
+   * （上限があるので、入れ替えは拠点の画面で選ばせる）。
+   * @returns {{success:boolean, reason:string}}
+   *   reason: "bought" | "already" | "notForSale" | "notEnoughGold"
+   */
+  Game.prototype.buyBlessing = function (blessingId) {
+    var blessing = (this.data.blessings || {})[blessingId];
+    if (!blessing || !blessing.locked) return { success: false, reason: "notForSale" };
+    if (this.hasBoughtBlessing(blessingId)) return { success: false, reason: "already" };
+
+    var price = blessing.price || 0;
+    if (this.gold < price) return { success: false, reason: "notEnoughGold" };
+
+    this.gold -= price;
+    this.markBlessingBought(blessingId);
+
+    // 空きがあるうちは、買ってすぐ使えるように入れておく
+    if (this.countActiveBlessings() > this.getBlessingActiveMax()) {
+      if (!this.offBlessings) this.offBlessings = {};
+      this.offBlessings[blessingId] = true;
+    }
+    return { success: true, reason: "bought" };
+  };
+
+  /** いま選択肢に出る加護か（持っていて、かつ外していない） */
+  Game.prototype.isBlessingActive = function (blessingId) {
+    if (!this.ownsBlessing(blessingId)) return false;
+    return !(this.offBlessings && this.offBlessings[blessingId]);
+  };
+
+  // --- 挑戦（ラン） ---
+
+  /**
+   * ダンジョンへ入るときに呼ぶ。ここから拠点へ戻るまでが1回のラン。
+   * @param {object} dungeonDef data/dungeons.js の1件
+   */
+  Game.prototype.beginRun = function (dungeonDef) {
+    this.run = new NS.RunSession(dungeonDef);
+    if (this.party && this.party.getMembers) this.run.recordStartParty(this.party.getMembers());
+  };
+
+  /**
+   * ランを終える。
+   * 無事に帰った場合は拾ったものをそのまま持ち帰り、
+   * 全滅した場合は data/run.js の設定に従って失う。
+   *
+   * @param {boolean} survived 無事に帰れたか
+   * @returns {{items:Array, monsters:Array}} 失ったもの（何も失わなければ空）
+   */
+  Game.prototype.endRun = function (survived) {
+    var lost = { items: [], monsters: [] };
+    var run = this.run;
+    this.run = null;
+
+    if (run && !survived) {
+      var rules = this.data.run || {};
+      if (rules.loseItemsOnDefeat) lost.items = this._loseRunItems(run);
+      if (rules.loseMonstersOnDefeat) lost.monsters = this._loseRunMonsters(run);
+    }
+
+    // 加護はそのラン限り。拠点へ着いた時点で消える
+    this._clearRunEffects();
+
+    // 拠点に着いた時点で立て直せるようにする（ラン中は道具でしか回復できない）
+    if ((this.data.run || {}).healOnReturn && this.party) this.party.healAll();
+
+    // 状態異常は拠点で全部消える。
+    // 毒だけは戦闘が終わっても残る（persists）ので、ここで落とさないと
+    // 拠点で全快したのに毒だけ付いたまま、という状態になってしまう。
+    // 回復と同じ条件（healOnReturn）で扱う —— 「拠点で立て直す」ひとまとまりの処理
+    if ((this.data.run || {}).healOnReturn) this._clearAllStatuses();
+
+    return lost;
+  };
+
+  /**
+   * 加護（そのラン限りの強化）を得る。
+   * パーティ全員に掛かるので、いま連れている全員へ効果を配る。
+   * @param {object} blessing data/blessings.js の1件
+   */
+  Game.prototype.addBlessing = function (blessing) {
+    if (!blessing || !this.run) return false;
+
+    this.run.addBlessing(blessing);
+    this._refreshRunEffects();
+    return true;
+  };
+
+  /**
+   * いま連れている全員へ、加護の効果を配り直す。
+   * 仲間が増えたとき（スカウト）にも呼ぶ。
+   */
+  Game.prototype._refreshRunEffects = function () {
+    var effects = this.run ? this.run.getBlessingEffects() : [];
+    var members = this.party.getMembers();
+
+    for (var i = 0; i < members.length; i++) {
+      members[i].runEffects = effects.slice();
+    }
+  };
+
+  /** 状態異常を全員から取り除く（拠点に帰ったとき）。預かり所の仲間も含む */
+  Game.prototype._clearAllStatuses = function () {
+    var lists = [this.party.getMembers(), this.storage.getMembers()];
+
+    for (var i = 0; i < lists.length; i++) {
+      for (var j = 0; j < lists[i].length; j++) {
+        if (lists[i][j].clearAllStatuses) lists[i][j].clearAllStatuses();
+      }
+    }
+  };
+
+  /** 加護の効果を全員から取り除く（ランが終わったとき） */
+  Game.prototype._clearRunEffects = function () {
+    var lists = [this.party.getMembers(), this.storage.getMembers()];
+
+    for (var i = 0; i < lists.length; i++) {
+      for (var j = 0; j < lists[i].length; j++) lists[i][j].runEffects = [];
+    }
+  };
+
+  /** そのランで拾った分だけを持ち物から取り除く（持ち込んだ分は残る） */
+  Game.prototype._loseRunItems = function (run) {
+    var gained = run.getGainedItems();
+    var lost = [];
+
+    for (var i = 0; i < gained.length; i++) {
+      var removed = this.inventory.remove(gained[i].itemId, gained[i].count);
+      if (removed > 0) lost.push({ itemId: gained[i].itemId, count: removed });
+    }
+    return lost;
+  };
+
+  /** そのランで仲間になった個体だけをパーティから外す */
+  Game.prototype._loseRunMonsters = function (run) {
+    var gained = run.getGainedMonsters();
+    var lost = [];
+
+    for (var i = 0; i < gained.length; i++) {
+      var index = this.party.getMembers().indexOf(gained[i]);
+      if (index >= 0) lost.push(this.party.remove(index));
+    }
+    return lost;
+  };
+
+  // --- ゴールド ---
+
+  /**
+   * ゴールドを渡す。
+   * 全滅しても失わないので、挑戦（ラン）の記録には入れない。
+   * @returns {number} 実際に増えた量
+   */
+  /**
+   * ゴールドを渡す。上限（data/player.js の maxGold。v1.4.4）を超えたぶんは入らない。
+   * @returns {number} 実際に増えた量（上限に届いていれば 0）
+   */
+  Game.prototype.giveGold = function (amount) {
+    if (!amount || amount <= 0) return 0;
+    var added = Math.min(amount, this.getGoldRoom());
+    if (added <= 0) return 0;
+    this.gold += added;
+    // 結果画面で「いくら稼いだか」を出せるよう、挑戦中は記録しておく
+    if (this.run) this.run.recordGold(added);
+    return added;
+  };
+
+  /** 持てるゴールドの上限（v1.4.4） */
+  Game.prototype.getMaxGold = function () {
+    var max = ((this.data && this.data.player) || {}).maxGold;
+    return (typeof max === "number" && max > 0) ? max : Infinity;
+  };
+
+  /** あといくら持てるか */
+  Game.prototype.getGoldRoom = function () {
+    return Math.max(0, this.getMaxGold() - (this.gold || 0));
+  };
+
+  /** 所持金が上限に届いているか（所持金の色を変えるのに使う） */
+  Game.prototype.isGoldFull = function () {
+    return (this.gold || 0) >= this.getMaxGold();
+  };
+
+  /** 支払えるか */
+  Game.prototype.canAfford = function (amount) {
+    return this.gold >= (amount || 0);
+  };
+
+  /**
+   * ゴールドを支払う。足りなければ何もしない。
+   * @returns {boolean} 支払えたか
+   */
+  Game.prototype.spendGold = function (amount) {
+    if (!this.canAfford(amount)) return false;
+    this.gold -= (amount || 0);
+    return true;
+  };
+
+  /**
+   * アイテムを渡す。持ち物へ加えると同時に図鑑へも記録する。
+   * アイテムを入手させるときは必ずこれを通すこと
+   * （持ち物・図鑑・ランの記録がずれないようにするため）。
+   * @returns {number} 実際に加えられた個数
+   */
+  Game.prototype.giveItem = function (itemId, count) {
+    var added = this.inventory.add(itemId, count);
+    if (added > 0) {
+      this.discovery.markItemObtained(itemId);
+      if (this.run) this.run.recordItem(itemId, added);
+    }
+    return added;
+  };
+
+  /**
+   * 仲間を加える。パーティへ加えると同時に図鑑へも記録する。
+   * @returns {boolean} 加えられたか
+   */
+  Game.prototype.addMonster = function (monster) {
+    if (!monster) return false;
+    var added = this.party.add(monster);
+    if (added) {
+      this.discovery.markMonsterCaught(monster.speciesId);
+      this.recordLearnedSkills(monster);
+      if (this.run) {
+        this.run.recordMonster(monster);
+        this._refreshRunEffects();   // 途中で仲間になった相手にも加護を配る
+      }
+    }
+    return added;
+  };
+
+  /**
+   * 仲間を拠点の預かり所へ送る。図鑑への記録も行う。
+   * パーティがいっぱいのときのスカウトなどで使う。
+   * @returns {boolean} 預けられたか
+   */
+  Game.prototype.storeMonster = function (monster) {
+    if (!monster) return false;
+    var stored = this.storage.add(monster);
+    if (stored) {
+      this.discovery.markMonsterCaught(monster.speciesId);
+      this.recordLearnedSkills(monster);
+    }
+    return stored;
+  };
+
+  /**
+   * パーティの1体を預かり所へ送る。
+   * @param {number} index パーティの位置
+   * @returns {object|null} 預けた個体
+   */
+  Game.prototype.depositToStorage = function (index) {
+    if (this.storage.isFull()) return null;
+
+    var monster = this.party.get(index);
+    if (!monster) return null;
+
+    this.party.remove(index);
+    this.storage.add(monster);
+    return monster;
+  };
+
+  /**
+   * 預かり所から引き取ってパーティへ加える。
+   * @returns {boolean} 引き取れたか（パーティがいっぱいなら false）
+   */
+  Game.prototype.takeFromStorage = function (index) {
+    if (this.party.isFull()) return false;
+
+    var monster = this.storage.get(index);
+    if (!monster) return false;
+
+    this.storage.remove(index);
+    return this.addMonster(monster);
+  };
+
+  /**
+   * パーティの1体と預かり所の1体を入れ替える（パーティがいっぱいでも加えられるように。v1.3.0）。
+   * それぞれ相手のいた位置へ入る（パーティの並び・預かり所の並びは崩さない）。
+   * @returns {{taken:object, stored:object}|null} taken … パーティに入った個体 / stored … 預けた個体
+   */
+  Game.prototype.swapWithStorage = function (partyIndex, storageIndex) {
+    var stored = this.party.get(partyIndex);
+    var taken = this.storage.get(storageIndex);
+    if (!stored || !taken) return null;
+    this.party.getMembers()[partyIndex] = taken;
+    this.storage.getMembers()[storageIndex] = stored;
+    return { taken: taken, stored: stored };
+  };
+
+  // --- 探索中に使う技 ---
+
+  /**
+   * その技を探索中（戦闘の外）で使えるか。決まりは data/skills.js の fieldUse の説明。
+   *   ・威力を持つ技（攻撃の技）は使えない
+   *   ・fieldUse: false と書いた技は使えない
+   *   ・HPを回復する技（heal）と、状態異常を治す技（cureStatus。クレンズ）は、書かなくても使える
+   *   ・それ以外は fieldUse: true と書いた技だけ
+   */
+  Game.isFieldSkill = function (skill) {
+    if (!skill || skill.power) return false;
+    if (skill.fieldUse === false) return false;
+    if (skill.heal || skill.cureStatus || skill.revive) return true;
+    return skill.fieldUse === true;
+  };
+
+  /** その仲間が探索中に使える技のid */
+  Game.prototype.fieldSkillsOf = function (monster) {
+    var result = [];
+    var skills = (monster && monster.skills) || [];
+    for (var i = 0; i < skills.length; i++) {
+      if (Game.isFieldSkill(this.data.getSkill(skills[i]))) result.push(skills[i]);
+    }
+    return result;
+  };
+
+  /**
+   * 探索中に技を使う（HPの回復と、状態異常を治す技）。
+   * 回復量は戦闘と同じく data/skills.js の heal（{ min, max } か { amount }）。PPも戦闘と同じだけ払う。
+   *
+   * @returns {{success:boolean, reason?:string, amount?:number, cured?:string[], allHealed?:boolean, revived?:boolean, reviveFailed?:boolean}}
+   *   reason … "notUsable" / "userFainted"（使う側が倒れている）/ "noPp" /
+   *            "fainted"（相手が倒れている）/ "full"（相手が満タン）/ "allFull"（全員が満タン）/
+   *            "nothingToCure"（治す状態異常が無い）/ "notFainted"（起こす技で、相手が倒れていない）
+   *   cured  … 状態異常を治す技で、治したものの名前
+   *   allHealed … 味方全体の回復の技（キュアオール）を使った
+   *   revived / reviveFailed … 起こす技（リザレクト）で起きた／起きなかった（起きなくても PP は払う）
+   *   使えなかったときは PP を払わない
+   */
+  Game.prototype.useFieldSkill = function (user, skillId, target) {
+    var skill = this.data.getSkill(skillId);
+    if (!user || !target || !Game.isFieldSkill(skill)) return { success: false, reason: "notUsable" };
+    if (user.isFainted && user.isFainted()) return { success: false, reason: "userFainted" };
+    // 払うPP（特性「カチカチ」は ×1.5。MonsterInstance.getSkillPpCost）
+    var cost = user.getSkillPpCost ? user.getSkillPpCost(skill) : skill.pp;
+    if (cost && user.canPayPp && !user.canPayPp(cost)) return { success: false, reason: "noPp" };
+
+    // 倒れた仲間を起こす技（リザレクト）。確率も戻るHPも戦闘と同じ。起きなくても PP は払う
+    if (skill.revive) {
+      if (!target.isFainted || !target.isFainted()) return { success: false, reason: "notFainted" };
+      if (cost && user.payPp) user.payPp(cost);
+      var chance = (typeof skill.revive.chance === "number") ? skill.revive.chance : 1;
+      if (new NS.Random().next() >= chance) return { success: true, reviveFailed: true };
+      return { success: true, revived: true, amount: NS.ItemUsage.reviveTarget(target, skill.revive.hpRatio).amount };
+    }
+
+    // 味方全体の技は選んだ相手に関係なく全員へ向くので、選んだ相手が倒れていても使える
+    if (skill.target !== "allAllies" && target.isFainted && target.isFainted()) return { success: false, reason: "fainted" };
+
+    // 味方全体の回復の技（キュアオール）。量は1体ずつ戦闘と同じ決め方（下の1体のときと同じ）
+    if (skill.heal && skill.target === "allAllies") {
+      var party = (this.party && this.party.getMembers) ? this.party.getMembers() : [];
+      var hurt = party.filter(function (m) { return !m.isFainted() && m.currentHp < m.getMaxHp(); });
+      if (hurt.length === 0) return { success: false, reason: "allFull" };
+      var groupRandom = new NS.Random();
+      var groupMul = NS.EffectSystem ? new NS.EffectSystem(this.data).getHealDealtMultiplier(user) : 1;
+      for (var h = 0; h < hurt.length; h++) {
+        hurt[h].heal(Math.floor(groupRandom.nextInt(skill.heal.min, skill.heal.max) * groupMul));
+      }
+      if (cost && user.payPp) user.payPp(cost);
+      return { success: true, allHealed: true };
+    }
+
+    // 状態異常を治す技（クレンズ）。決まりは戦闘と同じ（BattleSystem.cureStatuses）
+    // 味方全体の技（清めの雨）は、選んだ相手に関係なく連れている全員を治す
+    if (skill.cureStatus && !skill.heal && skill.target === "allAllies") {
+      var names = [];
+      var members = (this.party && this.party.getMembers) ? this.party.getMembers() : [];
+      for (var m = 0; m < members.length; m++) {
+        if (members[m].isFainted && members[m].isFainted()) continue;
+        NS.BattleSystem.cureStatuses(members[m], skill.cureStatus).forEach(function (def) {
+          if (names.indexOf(def.name) < 0) names.push(def.name);
+        });
+      }
+      if (names.length === 0) return { success: false, reason: "nothingToCure" };
+      if (cost && user.payPp) user.payPp(cost);
+      return { success: true, cured: names };
+    }
+    if (skill.cureStatus && !skill.heal) {
+      var cured = NS.BattleSystem.cureStatuses(target, skill.cureStatus);
+      if (cured.length === 0) return { success: false, reason: "nothingToCure" };
+      if (cost && user.payPp) user.payPp(cost);
+      return { success: true, cured: cured.map(function (def) { return def.name; }) };
+    }
+
+    if (!skill.heal) return { success: false, reason: "notUsable" };
+    if (target.currentHp >= target.getMaxHp()) return { success: false, reason: "full" };
+
+    var spec = skill.heal;
+    var min = (typeof spec.min === "number") ? spec.min
+            : ((typeof spec.amount === "number") ? spec.amount : 0);
+    var max = (typeof spec.max === "number") ? spec.max : min;
+    if (max < min) max = min;
+    var amount = (max > min) ? new NS.Random().nextInt(min, max) : min;
+    // 使う側の「回復の技」への倍率（戦闘の BattleSystem._applyHeal と同じ）
+    if (NS.EffectSystem) {
+      amount = Math.floor(amount * new NS.EffectSystem(this.data).getHealDealtMultiplier(user));
+    }
+
+    var before = target.currentHp;
+    target.heal(amount);
+    if (cost && user.payPp) user.payPp(cost);
+    return { success: true, amount: target.currentHp - before };
+  };
+
+  /**
+   * 仲間を逃がす（パーティか預かり所から取り除く）。元には戻せない。
+   *
+   *   ・パーティの最後の1体は逃がせない（戦えなくなるため。預けるときと同じ決まり）
+   *   ・着けている装備は持ち物へ戻す。1つでも戻せない（持てる数がいっぱい）ときは逃がさない
+   *     （装備が消えてしまわないように、先に全部戻せるか確かめてから外す）
+   *   ・図鑑の記録（仲間にした・覚えた技・愛情度の段階）はそのまま残る
+   *
+   * @param {string} where "party" か "storage"
+   * @param {number} index
+   * @returns {{success:boolean, reason?:string, monster?:object}}
+   *   reason … "partner"（最初の相棒）/ "last"（最後の1体）/ "stackFull"（装備を戻せない）/ "none"（いない）
+   */
+  Game.prototype.releaseMonster = function (where, index) {
+    var list = (where === "storage") ? this.storage : this.party;
+    var monster = list ? list.get(index) : null;
+    if (!monster) return { success: false, reason: "none" };
+
+    // 最初の相棒は逃がせない
+    if (monster.partner) return { success: false, reason: "partner", monster: monster };
+    if (where !== "storage" && this.party.size() <= 1) return { success: false, reason: "last" };
+
+    // 装備を全部持ち物へ戻せるか、先に確かめる
+    var equipped = (monster.equipment || []).slice();
+    for (var i = 0; i < equipped.length; i++) {
+      var item = this.data.getItem(equipped[i]);
+      var maxStack = (item && item.maxStack !== undefined) ? item.maxStack : 999;
+      if (this.inventory.getCount(equipped[i]) + 1 > maxStack) {
+        return { success: false, reason: "stackFull", monster: monster };
+      }
+    }
+    for (var j = 0; j < equipped.length; j++) this.inventory.add(equipped[j], 1);
+    monster.equipment = [];
+
+    list.remove(index);
+    return { success: true, monster: monster };
+  };
+
+  // --- 装備 ---
+
+  /**
+   * 装備を身につける。持ち物から1つ取り出して個体へ移す。
+   *
+   * 枠は data/config.js の equipSlots（武器・防具・アクセサリー×2）。
+   * その装備の枠（items.js の equip.slot）が埋まっていれば、
+   * その枠で**いちばん古いもの**を外して持ち物へ戻してから着ける。
+   *
+   * ★ 同じ装備は2つ着けられない。アクセサリー枠が2つあっても、
+   *   同じ指輪を2つ重ねて効果を倍にすることはできない。
+   *
+   * @param {object} monster 装備させる個体
+   * @param {string} itemId data/items.js の id（equip を持つもの）
+   * @returns {{success:boolean, reason?:string, replaced?:string}}
+   *   reason … "duplicate"（もう着けている）/ "stackFull"（外したものを持ち物へ戻せない）
+   *   replaced … 入れ替えで外した装備の id
+   */
+  Game.prototype.equipItem = function (monster, itemId) {
+    var item = this.data.getItem(itemId);
+    if (!monster || !item || !item.equip) return { success: false };
+
+    if (!monster.equipment) monster.equipment = [];
+    if (monster.equipment.indexOf(itemId) >= 0) return { success: false, reason: "duplicate" };
+    if (!this.inventory.has(itemId, 1)) return { success: false };
+
+    var slot = NS.EffectSystem.slotOf(item);
+    var capacity = NS.EffectSystem.slotCapacity(this.data, slot);
+    if (capacity <= 0) return { success: false, reason: "noSlot" };   // 枠が無い種類
+
+    // その枠が埋まっていれば、いちばん古いものを外す
+    var replaced = null;
+    var worn = this._equippedOfSlot(monster, slot);
+    if (worn.length >= capacity && worn.length > 0) {
+      replaced = this.unequipItem(monster, monster.equipment.indexOf(worn[0]));
+      if (!replaced) return { success: false, reason: "stackFull" };
+    }
+
+    this.inventory.remove(itemId, 1);
+    monster.equipment.push(itemId);
+    this._refreshVitals(monster);
+    return { success: true, replaced: replaced };
+  };
+
+  /**
+   * 装備を替えて最大HP・PPが動いたあとの、今のHP・PPの合わせ方。
+   *
+   *   拠点（挑戦中でない）… 満タンにする（拠点では常に全快。restoreAtHome と同じ考え方）
+   *   挑戦中               … 最大値を超えたぶんだけ削る（着け替えで回復できてしまわないように）
+   *
+   * ★ これが無かったころは、HP+の装備を外しても今のHPがそのまま残り、
+   *   「HP 103/98」のように最大値を超えた表示になっていた。
+   */
+  Game.prototype._refreshVitals = function (monster) {
+    if (!monster) return;
+    if (!this.run && (this.data.run || {}).healOnReturn && monster.healFull) {
+      monster.healFull();
+      return;
+    }
+    if (monster.getMaxHp) monster.currentHp = Math.min(monster.currentHp, monster.getMaxHp());
+    if (monster.getMaxPp) monster.currentPp = Math.min(monster.currentPp, monster.getMaxPp());
+  };
+
+  /**
+   * 拠点にいるあいだは、仲間（預かり所も含む）を常に全快・状態異常なしにしておく。
+   *
+   * 帰ってきたときの回復（endRun）だけだと、拠点でスカウトした仲間を連れに加えたときや、
+   * 装備を替えて最大HPが動いたときに、半端なHPのまま残ってしまう。拠点を開くたびに整える。
+   * 回復と同じ条件（data/run.js の healOnReturn）で扱う。
+   */
+  Game.prototype.restoreAtHome = function () {
+    if (this.run || !(this.data.run || {}).healOnReturn) return;
+    if (!this.party || !this.storage) return;
+
+    var lists = [this.party.getMembers(), this.storage.getMembers()];
+    for (var i = 0; i < lists.length; i++) {
+      for (var j = 0; j < lists[i].length; j++) {
+        if (lists[i][j].healFull) lists[i][j].healFull();
+      }
+    }
+    this._clearAllStatuses();
+  };
+
+  /** その枠に着けている装備の id（着けた順） */
+  Game.prototype._equippedOfSlot = function (monster, slot) {
+    var result = [];
+    var list = (monster && monster.equipment) || [];
+    for (var i = 0; i < list.length; i++) {
+      var item = this.data.getItem(list[i]);
+      if (item && item.equip && NS.EffectSystem.slotOf(item) === slot) result.push(list[i]);
+    }
+    return result;
+  };
+
+  /**
+   * 装備を外して持ち物へ戻す。
+   * 戻せない場合は外さない（装備が消えないようにする）。
+   * 種類数に上限は無いので、戻せないのは同じ装備を maxStack まで持っているときだけ。
+   *
+   * @param {object} monster
+   * @param {number} index 外す装備の位置
+   * @returns {string|null} 外した装備のid
+   */
+  Game.prototype.unequipItem = function (monster, index) {
+    var list = (monster && monster.equipment) || [];
+    var itemId = list[index];
+    if (!itemId) return null;
+
+    if (this.inventory.add(itemId, 1) <= 0) return null;
+
+    list.splice(index, 1);
+    this._refreshVitals(monster);
+    return itemId;
+  };
+
+  /**
+   * 枠を1つ指定して、持ち物の装備を着ける（v1.3.0 の装備画面）。
+   * equipItem は「枠が埋まっていればいちばん古いものと入れ替え」だが、
+   * アクセサリーの2枠のどちらを外すかを選べるように、入れ替える位置を受け取る。
+   * 入れ替えた装備は同じ位置に入るので、「アクセ1」「アクセ2」の並びが動かない。
+   *
+   * @param {object} monster
+   * @param {string} itemId
+   * @param {number} replaceIndex monster.equipment の何番目と入れ替えるか。-1 なら空いている枠へ
+   * @returns {{success:boolean, reason?:string, replaced?:string}} equipItem と同じ形
+   */
+  Game.prototype.equipItemAt = function (monster, itemId, replaceIndex) {
+    var list = (monster && monster.equipment) || [];
+    var old = (replaceIndex >= 0) ? list[replaceIndex] : null;
+    if (!old) return this.equipItem(monster, itemId);
+
+    var item = this.data.getItem(itemId);
+    if (!item || !item.equip) return { success: false };
+    if (old === itemId) return { success: false, reason: "duplicate" };
+    for (var i = 0; i < list.length; i++) {
+      if (i !== replaceIndex && list[i] === itemId) return { success: false, reason: "duplicate" };
+    }
+    if (!this.inventory.has(itemId, 1)) return { success: false };
+
+    // 先に新しい方を持ち物から出す。外した方が持ち物へ戻せなければ、元に戻して断る
+    this.inventory.remove(itemId, 1);
+    if (this.inventory.add(old, 1) <= 0) {
+      this.inventory.add(itemId, 1);
+      return { success: false, reason: "stackFull" };
+    }
+    list[replaceIndex] = itemId;
+    this._refreshVitals(monster);
+    return { success: true, replaced: old };
+  };
+
+  /**
+   * ほかの仲間が着けている装備を、こちらへ移す（v1.3.0 の装備画面）。
+   * こちらのその枠に着けていたものは、相手の空いた枠へ渡す（入れ替え）。
+   * 相手が同じものをもう着けていて渡せないときは、持ち物へ戻す。
+   *
+   * @param {object} monster 着ける側
+   * @param {number} replaceIndex monster.equipment の何番目と入れ替えるか。-1 なら空いている枠へ
+   * @param {object} owner いま着けている仲間
+   * @param {number} ownerIndex owner.equipment の何番目か
+   * @returns {{success:boolean, reason?:string, itemId?:string, given?:string, stored?:string}}
+   *   given … 相手へ渡した装備 / stored … 相手へ渡せず持ち物へ戻した装備
+   */
+  Game.prototype.takeEquipmentFrom = function (monster, replaceIndex, owner, ownerIndex) {
+    var mine = (monster && monster.equipment) || [];
+    var theirs = (owner && owner.equipment) || [];
+    var itemId = theirs[ownerIndex];
+    if (!itemId || owner === monster) return { success: false };
+    for (var i = 0; i < mine.length; i++) {
+      if (i !== replaceIndex && mine[i] === itemId) return { success: false, reason: "duplicate" };
+    }
+
+    var old = (replaceIndex >= 0) ? mine[replaceIndex] : null;
+    var give = !!old && theirs.indexOf(old) < 0;
+    if (old && !give && this.inventory.add(old, 1) <= 0) return { success: false, reason: "stackFull" };
+
+    if (give) theirs[ownerIndex] = old;
+    else theirs.splice(ownerIndex, 1);
+    if (old) mine[replaceIndex] = itemId;
+    else mine.push(itemId);
+
+    this._refreshVitals(monster);
+    this._refreshVitals(owner);
+    return { success: true, itemId: itemId, given: give ? old : null, stored: (old && !give) ? old : null };
+  };
+
+  /**
+   * 着けている装備をすべて外して持ち物へ戻す（v1.3.0 の装備画面）。
+   * 戻せないもの（同じ装備を持てる数いっぱいまで持っている）は着けたまま残す。
+   * @returns {{removed:number, kept:number}}
+   */
+  Game.prototype.unequipAll = function (monster) {
+    var list = (monster && monster.equipment) || [];
+    var removed = 0;
+    for (var i = list.length - 1; i >= 0; i--) {
+      if (this.unequipItem(monster, i)) removed++;
+    }
+    return { removed: removed, kept: list.length };
+  };
+
+  /**
+   * いま持っている仲間・アイテムを図鑑に記録する。
+   *
+   * 最初の仲間だけでなく、**セーブから読み込んだときにも通る**。
+   * 技の記録（skillsLearned）は後から足した項目なので、
+   * ここで拾い直さないと、古いセーブでは覚えている技まで「???」に戻ってしまう。
+   * 預かり所にいる仲間も同じように見る。
+   */
+  Game.prototype._recordInitialDiscoveries = function () {
+    var lists = [this.party.getMembers(), this.storage.getMembers()];
+    var i, j;
+
+    for (i = 0; i < lists.length; i++) {
+      for (j = 0; j < lists[i].length; j++) {
+        this.discovery.markMonsterCaught(lists[i][j].speciesId);
+        this.recordLearnedSkills(lists[i][j]);
+        // 愛情度の段階も拾い直す（図鑑の記録をどこまで読めるか）
+        if (lists[i][j].getAffectionStageIndex && this.discovery.markAffectionStage) {
+          this.discovery.markAffectionStage(lists[i][j].speciesId, lists[i][j].getAffectionStageIndex());
+        }
+      }
+    }
+
+    var slots = this.inventory.getSlots();
+    for (i = 0; i < slots.length; i++) {
+      this.discovery.markItemObtained(slots[i].itemId);
+    }
+    this._forgetDefeatOnlySkills();
+  };
+
+  /**
+   * v1.4.3 の移し替え：1.4.2 まではシニガミを倒すだけで、シニガミの覚える技が図鑑に開いていた（dexOnDefeat）。
+   * 1.4.3 からはほかの種族と同じく、実際に覚えたら開く。シニガミを仲間にしたことが無いなら、
+   * シニガミしか覚えない技（いまは死神の鎌・死の踊り）の「覚えた」の記録を消して伏せ直す。
+   * ほかの種族も覚える技（デス＝ツリガネ Lv25・デスラ＝ツリガネ Lv40。v1.5.0）は、倒して開いたのか覚えて開いたのか分からないので残す。
+   * 読み込むたびに通るので、ほかの種族の learnset から毎回数え直す（ツリガネで覚えたデスラを消さないため）
+   */
+  Game.prototype._forgetDefeatOnlySkills = function () {
+    var d = this.discovery, monsters = (this.data && this.data.monsters) || {};
+    if (!d || !d.skillsLearned || !monsters.shinigami || d.isMonsterCaught("shinigami")) return;
+    var others = {};
+    Object.keys(monsters).forEach(function (id) {
+      if (id === "shinigami") return;
+      var sp = monsters[id];
+      (sp.learnset || []).forEach(function (e) { others[e.skill] = true; });
+      var reward = sp.bondReward || (sp.bondSkill ? { skill: sp.bondSkill } : null);
+      if (reward && reward.skill) others[reward.skill] = true;
+    });
+    (monsters.shinigami.learnset || []).forEach(function (e) {
+      if (!others[e.skill]) delete d.skillsLearned[e.skill];
+    });
+  };
+
+  /**
+   * その個体が「いま覚えている技」を図鑑に記録する。
+   *
+   * ★ 図鑑の技は、覚える種族を捕まえたかどうかではなく
+   *   **実際に覚えたかどうか**で判明する。
+   *   技はレベルで覚えるので、捕獲だけを条件にすると、
+   *   Lv1のスライムを1体捕まえた時点で Lv11 の「キュア」まで出てしまう。
+   *
+   * 仲間に加わったとき・預けたとき・レベルアップで覚えたときに呼ぶ。
+   */
+  Game.prototype.recordLearnedSkills = function (monster) {
+    var skills = (monster && monster.skills) || [];
+    for (var i = 0; i < skills.length; i++) {
+      this.discovery.markSkillLearned(skills[i]);
+    }
+  };
+
+  /**
+   * ストーリーを全部クリアしたか（v1.0.0。種族の scoutableWhen.storyComplete で使う。
+   * v1.4.3 でシニガミはいつでも誘えるようにしたので、いまこの条件を書いた種族はいない）。
+   * 最後の物語の場面（data/story.js の id "ending"）を見たら true。
+   * ★ いまは最後の物語が無いので、いつも false。
+   *   最後の物語を足すときは、その場面の id を "ending" にする（違う id にするなら、ここも直す）
+   */
+  Game.prototype.isStoryComplete = function () {
+    return !!(this.story && this.story.seen && this.story.seen.ending);
+  };
+
+  /**
+   * いまの拠点の場所（v1.5.0）。data/ui.js の home.places の id。null なら揺籃の穴のほとり（もとの景色）。
+   * 第二章の場面9「萌芽の穴へ」（hougaArrival）を見たあとは、萌芽の穴のほとり
+   */
+  Game.prototype.getHomePlace = function () {
+    var seen = (this.story && this.story.seen) || {};
+    return seen.hougaArrival ? "houga" : null;
+  };
+
+  /**
+   * その場面の物語がまだなら流してから、次の画面へ移る。無ければそのまま次の画面へ。
+   *
+   * ★ 物語を足したい場面では、scenes.change(次) の代わりにこれを呼ぶだけでよい。
+   *   どの物語が流れるかは data/story.js の trigger で決まる。
+   *
+   * @param {string} trigger data/story.js の trigger
+   * @param {object} nextScene 物語のあと（または物語が無いとき）に移る画面
+   * @returns {boolean} 物語を流したか
+   */
+  Game.prototype.playStory = function (trigger, nextScene) {
+    var story = this.story.take(trigger, this);
+    if (!story) {
+      this.scenes.change(nextScene);
+      return false;
+    }
+    // trigger も渡すと、流し終えたときに同じきっかけの続きを探してくれる
+    this.scenes.change(new NS.StoryScene(this, story, nextScene, trigger));
+    return true;
+  };
+
+  /**
+   * id を指して物語の場面を1つ流し、終わったら nextScene へ（v1.5.0。予選の場面14〜18）。
+   * きっかけ（trigger）では探さないので、続きの場面は流さない。見た印は付ける（repeat の場面は次も流れる）
+   * @returns {boolean} 流したか（その場面が無ければ、すぐ nextScene へ移って false）
+   */
+  Game.prototype.playStoryScene = function (sceneId, nextScene) {
+    var story = ((this.data.story || {}).scenes || {})[sceneId];
+    if (!story) {
+      this.scenes.change(nextScene);
+      return false;
+    }
+    this.story.markSeen(story.id);
+    this.scenes.change(new NS.StoryScene(this, story, nextScene, null));
+    return true;
+  };
+
+  Game.prototype.start = function () {
+    // 最初はタイトル画面から
+    this.scenes.change(new NS.TitleScene(this));
+    this.loop.start();
+  };
+
+  Game.prototype._update = function (dt) {
+    this.clock += dt;
+    // 合計プレイ時間。読み込んだ値に足していくので、セーブするとそのファイルに残る
+    this.playTime += dt;
+    this.input.update();
+
+    // ★ 最初の操作で音を鳴らせるようにする。
+    //   どのブラウザも、画面を一度も触っていないうちは音を鳴らさない決まりがある。
+    //   場面ごとに書くと入れ忘れるので、入力を見ている**ここ1か所**で解除する
+    if (!this.audio.unlocked && this.input.isAnyPressed()) this.audio.unlock();
+
+    // どの音を鳴らすかは画面を動かす**前**に決め、鳴らすのは**後**。
+    // 前に決めるのは、決定で画面が切り替わると「切り替え中」になって鳴らせなくなるため。
+    // 後に鳴らすのは、設定で音量を変えた直後のカーソル音を、変えた後の大きさにするため
+    var uiSound = this._pickUiSound();
+
+    this._uiSoundOverride = null;
+    this.scenes.update(dt);
+    // 画面が「できなかった」と言った操作は、決定音の代わりにその音を鳴らす（playError）
+    var se = this._uiSoundOverride || uiSound;
+    if (se) this.audio.playSe(se);
+
+    this.input.lateUpdate();
+  };
+
+  /**
+   * この操作は「できなかった」と知らせる音を鳴らす（お金が足りない・使えない など）。
+   *
+   * 画面の update の中から呼ぶ。決定音と重ならないよう、その操作ぶんの決定音を
+   * **置き換えて**鳴る（同じフレームの _update が拾う）。どの音かは data/audio.js の ui.error。
+   */
+  Game.prototype.playError = function () {
+    var ui = (this.data.audio || {}).ui || {};
+    this._uiSoundOverride = ui.error || ui.cancel || null;
+  };
+
+  /**
+   * 決定・キャンセル・カーソルの音を、この操作で鳴らすなら、その id。
+   *
+   * ★ 画面ごとに書かず、入力を見ている**ここ1か所**で決める。
+   *   メニューの部品は多く（CommandMenu・ScrollList・各画面の直書き）、
+   *   ひとつずつ足すと必ず鳴らない場所が残る。
+   *   どのキーがどの音かは data/audio.js の ui に書く。
+   *
+   * カーソル音だけは、画面が「鳴らさない」と言えば止める（scene.silentCursor）。
+   * 探索中の移動は矢印キーなので、そのまま鳴らすと一歩ごとに鳴ってしまう。
+   * 画面の切り替え中はどの音も鳴らさない（押しても何も起きない間だから）。
+   *
+   * @returns {string|null}
+   */
+  Game.prototype._pickUiSound = function () {
+    var ui = (this.data.audio || {}).ui;
+    if (!ui || this.scenes.isChanging()) return null;
+
+    var input = this.input;
+    var pointer = input.getPointer ? input.getPointer() : null;
+
+    if (input.isPressed("confirm") || (pointer && pointer.clicked)) return ui.confirm;
+    if (input.isPressed("cancel")) return ui.cancel;
+
+    var scene = this.scenes.current;
+    if (scene && scene.silentCursor) return null;
+
+    var keys = ui.cursorKeys || [];
+    for (var i = 0; i < keys.length; i++) {
+      if (input.isPressed(keys[i])) return ui.cursor;
+    }
+    return null;
+  };
+
+  Game.prototype._render = function () {
+    this.scenes.render(this.ctx);
+  };
+
+  NS.Game = Game;
+})(window.MyGame);

@@ -1,0 +1,639 @@
+/**
+ * SaveManager.js
+ * セーブデータの保存・読み込みを担当する。
+ *
+ * 保存先は localStorage。使えない環境（ブラウザの設定など）でも
+ * ゲームが止まらないよう、失敗しても例外を投げず結果を返す形にしている。
+ *
+ * ▼ 保存する内容
+ *   version   : セーブ形式のバージョン（data/save.js）
+ *   savedAt   : 保存日時
+ *   floor     : 現在の階層
+ *   party     : 手持ちモンスター（並び順・レベル・HPなど）
+ *   storage   : 拠点の預かり所に預けている仲間
+ *   inventory : 持ち物
+ *   gold      : 所持金
+ *   discovery : 図鑑の発見記録
+ *   tutorial / story : どの説明・どの物語の場面をもう見たか
+ *   playTime  : そのファイルの合計プレイ時間（ミリ秒）。ファイル選択の一覧に出す
+ *   dungeon   : マップとプレイヤー位置（続きから同じ場所で再開するため）
+ */
+(function (NS) {
+  "use strict";
+
+  /**
+   * @param {MyGame.GameData} gameData
+   * @param {number} [slot] どのセーブファイルを扱うか（1〜slotCount）。省略すると1
+   */
+  function SaveManager(gameData, slot) {
+    this.data = gameData;
+    var config = gameData.save || {};
+    this.storageKey = config.storageKey || "game.save";
+    this.slotSuffix = config.slotSuffix || ".slot";
+    this.suspendSuffix = config.suspendSuffix || ".suspend";
+    this.settingsSuffix = config.settingsSuffix || ".settings";
+    this.slotCount = config.slotCount || 1;
+    this.saveVersion = config.saveVersion || 1;
+
+    this.slot = clampSlot(slot, this.slotCount);
+  }
+
+  /** 扱うセーブファイルを変える */
+  SaveManager.prototype.setSlot = function (slot) {
+    this.slot = clampSlot(slot, this.slotCount);
+    return this.slot;
+  };
+
+  /**
+   * そのスロットの保存先キー。
+   *
+   * ★ スロット1だけは昔からのキーをそのまま使う。
+   *   ここで全スロットに番号を付けると、
+   *   それまで遊んでいたセーブがどこからも見えなくなる。
+   */
+  SaveManager.prototype.keyFor = function (slot) {
+    var n = clampSlot(slot, this.slotCount);
+    return (n === 1) ? this.storageKey : (this.storageKey + this.slotSuffix + n);
+  };
+
+  /** そのスロットの中断データの保存先キー（セーブ本体とは別） */
+  SaveManager.prototype.suspendKeyFor = function (slot) {
+    return this.keyFor(slot) + this.suspendSuffix;
+  };
+
+  /**
+   * そのスロットの設定（音量・戦闘速度など）の保存先キー。
+   * 書き読みは SettingsManager が行う。ここはキーを決めるのと、
+   * コピー・移動・削除でセーブと一緒に運ぶだけ
+   */
+  SaveManager.prototype.settingsKeyFor = function (slot) {
+    return this.keyFor(slot) + this.settingsSuffix;
+  };
+
+  function clampSlot(slot, count) {
+    var n = Math.floor(Number(slot));
+    if (!isFinite(n) || n < 1) return 1;
+    return Math.min(n, count || 1);
+  }
+
+  // --- 保存 ---
+
+  /**
+   * 現在の状態を保存する。
+   * @param {object} state { floor, party, inventory, discovery, dungeon }
+   *   dungeon は { rows, playerCol, playerRow } を想定（省略可）
+   * @returns {{success:boolean, reason:string}}
+   *   reason: "saved" | "unavailable" | "error"
+   */
+  SaveManager.prototype.save = function (state) {
+    return this._write(this.keyFor(this.slot), state);
+  };
+
+  /**
+   * 探索の途中の状態を「中断」として書く。セーブ本体には触らない。
+   * @param {object} state save() と同じ ＋ run（Game.suspendRun が組む）
+   */
+  SaveManager.prototype.saveSuspend = function (state) {
+    return this._write(this.suspendKeyFor(this.slot), state);
+  };
+
+  SaveManager.prototype._write = function (key, state) {
+    if (!this.isAvailable()) return { success: false, reason: "unavailable" };
+
+    var payload = this._buildPayload(state);
+    try {
+      window.localStorage.setItem(key, JSON.stringify(payload));
+      return { success: true, reason: "saved" };
+    } catch (e) {
+      return { success: false, reason: "error" };
+    }
+  };
+
+  /** 保存する中身。セーブ本体も中断も同じ形にしておく（読む側が1つで済む） */
+  SaveManager.prototype._buildPayload = function (state) {
+    return {
+      version: this.saveVersion,
+      savedAt: new Date().toISOString(),
+      floor: state.floor,
+      party: state.party ? state.party.toSaveData() : null,
+      storage: state.storage ? state.storage.toSaveData() : null,
+      inventory: state.inventory ? state.inventory.toSaveData() : null,
+      gold: state.gold || 0,
+      discovery: state.discovery ? state.discovery.toSaveData() : null,
+      // どのチュートリアルを見たか。含めないと再開のたびに同じ説明が出る
+      tutorial: state.tutorial ? state.tutorial.toSaveData() : null,
+      // どの物語の場面を見たか（data/story.js）。チュートリアルと同じ理由
+      story: state.story ? state.story.toSaveData() : null,
+      // 主人公の名前と服の色（ファイルごとに違う）
+      playerName: state.playerName || null,
+      playerColor: state.playerColor || null,
+      // 新しい絵の見た目（v1.2.0）。ズボンの色・髪型・髪の色・飾り（id の配列）・飾りの色（飾りの id → 色）
+      playerPants: state.playerPants || null,
+      playerHair: state.playerHair || null,
+      playerHairColor: state.playerHairColor || null,
+      playerAcc: state.playerAcc || null,
+      playerAccColor: state.playerAccColor || null,
+      // 性別と一人称（ゲームの進み方には影響しない。物語の {me} に使う）
+      playerGender: state.playerGender || null,
+      playerFirstPerson: state.playerFirstPerson || null,
+      // 一度きりの出来事を済ませたか（{ id: true }）。data/dungeons.js の events
+      doneEvents: state.doneEvents || null,
+      clearedDungeons: state.clearedDungeons || null,
+      // そのファイルの合計プレイ時間（ミリ秒）。ファイル選択の一覧に出す
+      playTime: state.playTime || 0,
+      // 買った加護と、選択肢から外している加護（挑戦をまたいで残る）
+      boughtBlessings: state.boughtBlessings || null,
+      offBlessings: state.offBlessings || null,
+      // 拠点のメニューの印のために、店と図鑑で何を見たか（{ shop: { key: true }, dex: 数 }）
+      homeSeen: state.homeSeen || null,
+      dungeon: state.dungeon || null,
+      // 中断のときだけ。挑戦の記録（加護・拾ったもの）と、その階の仕掛け
+      run: state.run || null,
+      features: state.features || null
+    };
+  };
+
+  // --- 読み込み ---
+
+  /**
+   * 保存された状態を読み込む。
+   * @returns {{success:boolean, reason:string, state:object|null}}
+   *   reason: "loaded" | "empty" | "unavailable" | "broken" | "versionMismatch"
+   */
+  SaveManager.prototype.load = function () {
+    return this._read(this.keyFor(this.slot));
+  };
+
+  /** 中断データを読み込む（形は load と同じ。state.run / state.features が入る） */
+  SaveManager.prototype.loadSuspend = function () {
+    return this._read(this.suspendKeyFor(this.slot));
+  };
+
+  SaveManager.prototype._read = function (key) {
+    if (!this.isAvailable()) return fail("unavailable");
+
+    var raw;
+    try {
+      raw = window.localStorage.getItem(key);
+    } catch (e) {
+      return fail("unavailable");
+    }
+    if (!raw) return fail("empty");
+
+    var payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (e) {
+      return fail("broken");
+    }
+    if (!payload || typeof payload !== "object") return fail("broken");
+
+    // 形式が違うセーブは読み込まない（将来ここで変換処理を行う）
+    if (payload.version !== this.saveVersion) return fail("versionMismatch");
+
+    var party = NS.Party.fromSaveData(payload.party, this.data, this.data.config.partyMax);
+    if (party.isEmpty()) return fail("broken");
+
+    return {
+      success: true,
+      reason: "loaded",
+      state: {
+        floor: payload.floor || 1,
+        party: party,
+        // 預かり所・持ち物・発見記録は、古いセーブに無くても空の状態で復元できるようにする
+        storage: NS.MonsterStorage.fromSaveData(
+          payload.storage, this.data, this.data.config.storageMax),
+        inventory: NS.Inventory.fromSaveData(payload.inventory, this.data),
+        // 古いセーブには無いので、その場合は 0 から始める
+        gold: payload.gold || 0,
+        discovery: NS.Discovery.fromSaveData(payload.discovery),
+        // チュートリアルの記録。**無い場合は「全部もう見た」扱いにする**
+        //   （この仕組みができる前のセーブ。途中まで進めた人に
+        //     いまさら「戦い方」を出しても邪魔なだけなので）
+        //   その判断は Game 側で行うため、ここでは有無をそのまま渡す
+        tutorial: payload.tutorial || null,
+        // 物語の記録。無い場合の扱いもチュートリアルと同じ（Game 側で「全部見た」にする）
+        story: payload.story || null,
+        // 古いセーブには無い。その場合は既定の名前と色になる
+        playerName: payload.playerName || null,
+        playerColor: payload.playerColor || null,
+        playerPants: payload.playerPants || null,
+        playerHair: payload.playerHair || null,
+        playerHairColor: payload.playerHairColor || null,
+        playerAcc: payload.playerAcc || null,
+        playerAccColor: payload.playerAccColor || null,
+        playerGender: payload.playerGender || null,
+        playerFirstPerson: payload.playerFirstPerson || null,
+        // 古いセーブには無い。その場合は「まだ何も起きていない」扱い
+        // （起きるかどうかは出来事の条件で決まる。クリア済みの場所では起きない）
+        doneEvents: payload.doneEvents || {},
+        // 古いセーブには無いので、その場合は「何もクリアしていない」扱い
+        clearedDungeons: payload.clearedDungeons || {},
+        // 合計プレイ時間（ミリ秒）。古いセーブには無いので0から数え直す
+        playTime: payload.playTime || 0,
+        // 古いセーブには無いので、その場合は「何も買っていない・何も外していない」扱い
+        boughtBlessings: payload.boughtBlessings || {},
+        offBlessings: payload.offBlessings || {},
+        // 古いセーブには無い。null なら拠点で「いまの分は見た」として始める（HomeScene）
+        homeSeen: payload.homeSeen || null,
+        dungeon: payload.dungeon || null,
+        run: payload.run || null,
+        features: payload.features || null,
+        savedAt: payload.savedAt || null
+      }
+    };
+  };
+
+  // --- 補助 ---
+
+  /**
+   * セーブデータが存在するか（中身の正しさまでは見ない）。
+   * @param {number} [slot] 省略すると、いま扱っているスロット
+   */
+  SaveManager.prototype.hasSave = function (slot) {
+    if (!this.isAvailable()) return false;
+    try {
+      return !!window.localStorage.getItem(this.keyFor(slot === undefined ? this.slot : slot));
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /**
+   * セーブデータを削除する（中断データと設定も一緒に消す）。
+   * @param {number} [slot] 省略すると、いま扱っているスロット
+   */
+  SaveManager.prototype.clear = function (slot) {
+    if (!this.isAvailable()) return false;
+    var n = (slot === undefined) ? this.slot : slot;
+    try {
+      window.localStorage.removeItem(this.keyFor(n));
+      window.localStorage.removeItem(this.suspendKeyFor(n));
+      window.localStorage.removeItem(this.settingsKeyFor(n));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /** そのスロットに中断データがあるか */
+  SaveManager.prototype.hasSuspend = function (slot) {
+    if (!this.isAvailable()) return false;
+    try {
+      return !!window.localStorage.getItem(this.suspendKeyFor(slot === undefined ? this.slot : slot));
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /** どこかのスロットに中断データがあるか（タイトルの「中断したところから」を出すか） */
+  SaveManager.prototype.hasAnySuspend = function () {
+    for (var i = 1; i <= this.slotCount; i++) {
+      if (this.hasSuspend(i)) return true;
+    }
+    return false;
+  };
+
+  /** 中断データだけを消す（再開したときに呼ぶ。セーブ本体は残る） */
+  SaveManager.prototype.clearSuspend = function (slot) {
+    if (!this.isAvailable()) return false;
+    try {
+      window.localStorage.removeItem(this.suspendKeyFor(slot === undefined ? this.slot : slot));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /**
+   * --- ファイルの整理（コピー・移動・削除）---
+   *
+   * ★ 中身は一切読まずに、保存されている文字列をそのまま移す。
+   *   読み込んで組み立て直すと、いま遊べない形のデータ（古い形式など）を
+   *   移そうとしたときに壊れる。文字列のまま移せば、
+   *   読めないデータもそのまま運べる。
+   */
+
+  /** そのスロットに入っている文字列（無ければ null） */
+  SaveManager.prototype.readRaw = function (slot) {
+    if (!this.isAvailable()) return null;
+    try {
+      return window.localStorage.getItem(this.keyFor(slot));
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /**
+   * ファイルを別のスロットへ写す（元は残る）。
+   * @returns {{success:boolean, reason:string}}
+   *   reason: "copied" | "empty" | "sameSlot" | "unavailable" | "error"
+   */
+  SaveManager.prototype.copySlot = function (from, to) {
+    if (!this.isAvailable()) return { success: false, reason: "unavailable" };
+    if (from === to) return { success: false, reason: "sameSlot" };
+
+    var raw = this.readRaw(from);
+    if (!raw) return { success: false, reason: "empty" };
+
+    try {
+      window.localStorage.setItem(this.keyFor(to), raw);
+
+      // 中断データと設定も一緒に運ぶ。行き先に古いものが残っていれば消す
+      // （本体だけ新しくなって、中断や設定だけ別の冒険のもの、という食い違いを防ぐ）
+      var extras = [this.suspendKeyFor, this.settingsKeyFor];
+      for (var i = 0; i < extras.length; i++) {
+        var value = window.localStorage.getItem(extras[i].call(this, from));
+        if (value) window.localStorage.setItem(extras[i].call(this, to), value);
+        else window.localStorage.removeItem(extras[i].call(this, to));
+      }
+
+      return { success: true, reason: "copied" };
+    } catch (e) {
+      return { success: false, reason: "error" };
+    }
+  };
+
+  /**
+   * ファイルを別のスロットへ移す（元は空になる）。
+   *
+   * ★ 写してから消す順にすること。
+   *   先に消すと、書き込みに失敗したときにデータが消えてなくなる。
+   */
+  SaveManager.prototype.moveSlot = function (from, to) {
+    var result = this.copySlot(from, to);
+    if (!result.success) return result;
+
+    this.clear(from);
+    return { success: true, reason: "moved" };
+  };
+
+  /**
+   * --- ファイルへの書き出しと、ファイルからの読み込み（v1.3.1）---
+   *
+   * セーブはブラウザの中（localStorage）にしか無いので、ブラウザのデータを消すと無くなる。
+   * 1つのファイル（JSON）に書き出しておけば、控えにも、別のパソコンへ移すのにも使える。
+   *
+   * ★ コピー・移動と同じく、保存されている文字列をそのまま入れて運ぶ（中身を組み立て直さない）。
+   *   セーブ本体・中断・設定の3つを一緒に運ぶ。
+   *
+   * ファイルの形：
+   *   { format: "abyss-chronicle-save", formatVersion: 1, gameVersion, exportedAt, slot,
+   *     save: "本体の文字列", suspend: "中断の文字列" | null, settings: "設定の文字列" | null }
+   */
+  var EXPORT_FORMAT = "abyss-chronicle-save";
+
+  /**
+   * そのスロットを、書き出すファイルの中身にする。
+   * @returns {{success:boolean, reason:string, text?:string, fileName?:string}}
+   *   reason: "exported" | "empty" | "unavailable"
+   */
+  SaveManager.prototype.exportSlot = function (slot) {
+    if (!this.isAvailable()) return { success: false, reason: "unavailable" };
+    var n = clampSlot(slot, this.slotCount);
+    var raw = this.readRaw(n);
+    if (!raw) return { success: false, reason: "empty" };
+
+    var file = {
+      format: EXPORT_FORMAT,
+      formatVersion: 1,
+      gameVersion: (this.data.config || {}).version || "",
+      exportedAt: new Date().toISOString(),
+      slot: n,
+      save: raw,
+      suspend: getRaw(this.suspendKeyFor(n)),
+      settings: getRaw(this.settingsKeyFor(n))
+    };
+
+    var d = new Date();
+    function pad(v) { return (v < 10 ? "0" : "") + v; }
+    var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+      + "-" + pad(d.getHours()) + pad(d.getMinutes());
+
+    return {
+      success: true,
+      reason: "exported",
+      text: JSON.stringify(file, null, 1),
+      fileName: "ABYSS-CHRONICLE_slot" + n + "_" + stamp + ".json"
+    };
+  };
+
+  /**
+   * 読み込んだファイルの文字列を調べる。まだどこにも書かない。
+   * @returns {{success:boolean, reason:string, file?:object, summary?:object}}
+   *   reason: "ok" | "importBroken" | "importVersion"
+   *   summary は確かめの窓に出す { playerName, leadName, level }
+   */
+  SaveManager.prototype.parseImport = function (text) {
+    var file;
+    try {
+      file = JSON.parse(text);
+    } catch (e) {
+      return { success: false, reason: "importBroken" };
+    }
+    if (!file || file.format !== EXPORT_FORMAT || typeof file.save !== "string") {
+      return { success: false, reason: "importBroken" };
+    }
+
+    var payload;
+    try {
+      payload = JSON.parse(file.save);
+    } catch (e) {
+      return { success: false, reason: "importBroken" };
+    }
+    if (!payload || typeof payload !== "object") return { success: false, reason: "importBroken" };
+    // 形式が違うセーブは入れない（入れても「読み込めません」になるだけなので）
+    if (payload.version !== this.saveVersion) return { success: false, reason: "importVersion" };
+
+    var party = (payload.party && payload.party.members) || payload.party || [];
+    if (!party.length) return { success: false, reason: "importBroken" };
+    var lead = party[0];
+    var species = this.data.getMonsterData ? this.data.getMonsterData(lead.speciesId) : null;
+
+    return {
+      success: true,
+      reason: "ok",
+      file: {
+        save: file.save,
+        suspend: (typeof file.suspend === "string") ? file.suspend : null,
+        settings: (typeof file.settings === "string") ? file.settings : null
+      },
+      summary: {
+        playerName: payload.playerName || "",
+        leadName: lead.nickname || (species ? species.name : lead.speciesId),
+        level: lead.level || 1
+      }
+    };
+  };
+
+  /**
+   * parseImport で調べた中身を、そのスロットへ書く。行き先の中断と設定は、ファイルのもので置き換える
+   * （ファイルに無ければ消す。本体だけ新しくなって、中断や設定が別の冒険のもの、という食い違いを防ぐ）。
+   * @returns {{success:boolean, reason:string}} reason: "imported" | "unavailable" | "error"
+   */
+  SaveManager.prototype.importToSlot = function (file, slot) {
+    if (!this.isAvailable()) return { success: false, reason: "unavailable" };
+    if (!file || typeof file.save !== "string") return { success: false, reason: "error" };
+    var n = clampSlot(slot, this.slotCount);
+
+    try {
+      window.localStorage.setItem(this.keyFor(n), file.save);
+      var extras = [[this.suspendKeyFor(n), file.suspend], [this.settingsKeyFor(n), file.settings]];
+      for (var i = 0; i < extras.length; i++) {
+        if (extras[i][1]) window.localStorage.setItem(extras[i][0], extras[i][1]);
+        else window.localStorage.removeItem(extras[i][0]);
+      }
+      return { success: true, reason: "imported" };
+    } catch (e) {
+      return { success: false, reason: "error" };
+    }
+  };
+
+  function getRaw(key) {
+    try {
+      return window.localStorage.getItem(key) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * スロットの中身を、選択画面に出せる形だけ読む（遊べる状態には戻さない）。
+   *
+   * ★ load() を使わないのは、選択画面に3つ並べるためだけに
+   *   パーティ3体ぶんの個体を組み立てるのが無駄だから。
+   *   ここでは保存された数値をそのまま読むだけにしてある。
+   *
+   * @param {number} slot
+   * @returns {object} { slot, exists, broken, savedAt, leadName, level, partyCount,
+   *                     gold, cleared, playTime, place }
+   */
+  SaveManager.prototype.peek = function (slot) {
+    var n = clampSlot(slot, this.slotCount);
+    if (!this.isAvailable()) return { slot: n, exists: false, broken: false, suspended: null };
+
+    // 中断だけあって本体が無い（拠点で一度もセーブせずに中断した）こともあるので、
+    // 本体の有無とは別に見る
+    var suspended = this._suspendedPlace(n);
+    var empty = { slot: n, exists: false, broken: false, suspended: suspended };
+
+    var raw;
+    try {
+      raw = window.localStorage.getItem(this.keyFor(n));
+    } catch (e) {
+      return empty;
+    }
+    if (!raw) return empty;
+
+    var payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (e) {
+      return { slot: n, exists: true, broken: true };
+    }
+    if (!payload || typeof payload !== "object") {
+      return { slot: n, exists: true, broken: true };
+    }
+    // 形式が違うセーブは「あるが遊べない」として見せる（黙って空にしない）
+    if (payload.version !== this.saveVersion) {
+      return { slot: n, exists: true, broken: true };
+    }
+
+    // Party.toSaveData() は { members: [...] } の形。
+    // 昔の形（配列そのまま）でも読めるようにしておく
+    var party = (payload.party && payload.party.members) || payload.party || [];
+    var lead = party[0] || null;
+    var species = lead ? this.data.getMonsterData(lead.speciesId) : null;
+
+    return {
+      slot: n,
+      exists: true,
+      broken: false,
+      // 探索を中断したところがあれば、その場所（無ければ null）
+      suspended: suspended,
+      savedAt: payload.savedAt || null,
+      // 主人公の名前。決めていない古いセーブでは空になる
+      playerName: payload.playerName || "",
+      leadName: lead ? (lead.nickname || (species ? species.name : lead.speciesId)) : "",
+      level: lead ? (lead.level || 1) : 0,
+      partyCount: party.length,
+      // 連れている仲間（絵を並べるため。v1.4.0）
+      members: party.map(function (m) { return { speciesId: m.speciesId, level: m.level || 1 }; }),
+      gold: payload.gold || 0,
+      cleared: Object.keys(payload.clearedDungeons || {}).length,
+      // 合計プレイ時間（ミリ秒）。古いセーブには無いので0
+      playTime: payload.playTime || 0,
+      place: this._placeOf(payload)
+    };
+  };
+
+  /**
+   * どこで保存したか。
+   * ダンジョンの中で保存した場合だけ、その場所と階が入っている。
+   */
+  SaveManager.prototype._placeOf = function (payload) {
+    var dungeon = payload.dungeon;
+    if (!dungeon) return null;
+
+    var def = dungeon.dungeonId ? this.data.dungeons[dungeon.dungeonId] : null;
+    return {
+      dungeonId: dungeon.dungeonId || null,
+      name: def ? def.name : null,
+      floor: payload.floor || 1
+    };
+  };
+
+  /** 中断データがあれば、その場所（{ dungeonId, name, floor }）。無ければ null */
+  SaveManager.prototype._suspendedPlace = function (slot) {
+    var raw;
+    try {
+      raw = window.localStorage.getItem(this.suspendKeyFor(slot));
+    } catch (e) {
+      return null;
+    }
+    if (!raw) return null;
+
+    try {
+      var payload = JSON.parse(raw);
+      if (!payload || payload.version !== this.saveVersion) return null;
+      return this._placeOf(payload);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /** 全スロットの要約を並べて返す（選択画面が使う） */
+  SaveManager.prototype.peekAll = function () {
+    var list = [];
+    for (var i = 1; i <= this.slotCount; i++) list.push(this.peek(i));
+    return list;
+  };
+
+  /** どこかのスロットにセーブがあるか */
+  SaveManager.prototype.hasAnySave = function () {
+    for (var i = 1; i <= this.slotCount; i++) {
+      if (this.hasSave(i)) return true;
+    }
+    return false;
+  };
+
+  /** localStorage が使えるか（file:// やプライベートモードで使えない場合がある） */
+  SaveManager.prototype.isAvailable = function () {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return false;
+      // 実際に書き込めるかまで確認する
+      var probe = "__save_probe__";
+      window.localStorage.setItem(probe, "1");
+      window.localStorage.removeItem(probe);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  function fail(reason) {
+    return { success: false, reason: reason, state: null };
+  }
+
+  NS.SaveManager = SaveManager;
+})(window.MyGame);

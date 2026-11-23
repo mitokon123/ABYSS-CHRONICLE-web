@@ -1,0 +1,320 @@
+/**
+ * blessings.js
+ * 「加護」＝ 階を降りるたびに選ぶ、そのラン限りの強化。
+ *
+ * 効果は特性・装備とまったく同じ形式で書ける（data/abilities.js の説明を参照）。
+ *   statMultiplier … ステータスに倍率
+ *   statBonus      … ステータスに加算
+ *   damageDealt / damageTaken … 与える／受けるダメージに倍率
+ *
+ * id          : 識別子
+ * name        : 表示名
+ * description : 選ぶときに出る説明
+ * weight      : 選択肢に出やすさ（大きいほど出やすい）
+ * effects     : 効果の配列
+ * locked      : true なら最初は選択肢に出ない。謎の商人から買うと恒久的に解放される
+ * price       : 買値（locked のものだけ意味を持つ）
+ * unlockedBy  : 謎の商人に並ぶ条件（locked のものだけ）。書き方は data/dungeons.js の unlockedBy と同じ。
+ *               省略すると、商人が現れた時点（静寂の深層クリア）から並ぶ
+ *
+ * ▼ 効果は特性と同じ種類がすべて使える（regen / drain / firstStrike / counterStatus / undying も）。
+ *   戦闘で働いたときの文には、加護の名前が出る（「スライム の 疾き初手!」）
+ *
+ * ▼ 加護はパーティ全員に掛かる
+ *   誰に付けるかを選ばせると選択が長くなるため、全員に掛かる形にしている。
+ *
+ * ▼ 買える加護について
+ *   静寂の深層をクリアすると、ショップに謎の商人が並ぶ。
+ *   そこで買った加護は挑戦をまたいで残り、以後の選択肢に混ざるようになる。
+ *   持っている加護は拠点の「加護を選ぶ」で1つずつ外せるので、
+ *   買い足すほど選択肢が薄まる、ということにはならない。
+ *   （買ったかどうかは Game.boughtBlessings、外したかどうかは Game.offBlessings）
+ *
+ *   深層を1周すると1200G前後（約20戦 × 60G）。
+ *   安いものは1周で2つ買え、いちばん高い「深淵の恵み」でも1周に届く重さにしてある。
+ *   装備（最高でも500G）より高いが、手が出ないほどではない、という位置。
+ *
+ * ★ 加護を増やすときは、このファイルに1エントリ足すだけでよい。
+ */
+(function (NS) {
+  "use strict";
+
+  NS.rawData.blessings = {
+    fierceBeat: {
+      id: "fierceBeat",
+      name: "猛る鼓動",
+      description: "仲間全員の攻撃が10%上がる。",
+      weight: 1.0,
+      effects: [ { type: "statMultiplier", stat: "attack", value: 1.1 } ]
+    },
+
+    hardHide: {
+      id: "hardHide",
+      name: "硬い皮",
+      description: "仲間全員の防御が10%上がる。",
+      weight: 1.0,
+      effects: [ { type: "statMultiplier", stat: "defense", value: 1.1 } ]
+    },
+
+    swiftWind: {
+      id: "swiftWind",
+      name: "疾風の加護",
+      description: "仲間全員の素早さが10%上がる。",
+      weight: 1.0,
+      effects: [ { type: "statMultiplier", stat: "speed", value: 1.1 } ]
+    },
+
+    manaVessel: {
+      id: "manaVessel",
+      name: "魔力の器",
+      description: "仲間全員のPPが2増える。",
+      weight: 0.9,
+      effects: [ { type: "statBonus", stat: "pp", value: 2 } ]
+    },
+
+    sharpEdge: {
+      id: "sharpEdge",
+      name: "一撃の冴え",
+      description: "仲間全員の与えるダメージが8%増える。",
+      weight: 0.7,
+      effects: [ { type: "damageDealt", value: 1.08 } ]
+    },
+
+    guardMist: {
+      id: "guardMist",
+      name: "守りの霧",
+      description: "仲間全員の受けるダメージが8%減る。",
+      weight: 0.7,
+      effects: [ { type: "damageTaken", value: 0.92 } ]
+    },
+
+    emberEcho: {
+      id: "emberEcho",
+      name: "残り火の記憶",
+      description: "火属性の技で与えるダメージが20%増える。",
+      weight: 0.5,
+      effects: [ { type: "damageDealt", value: 1.20, element: "fire" } ]
+    },
+
+    lightGuide: {
+      id: "lightGuide",
+      name: "光の導き",
+      description: "光属性の技で与えるダメージが20%増える。",
+      weight: 0.5,
+      effects: [ { type: "damageDealt", value: 1.20, element: "light" } ]
+    },
+
+    lastStand: {
+      id: "lastStand",
+      name: "背水の構え",
+      description: "HPが1/4以下のとき、攻撃が30%上がる。",
+      weight: 0.4,
+      effects: [
+        { type: "statMultiplier", stat: "attack", value: 1.30,
+          condition: { hpBelow: 0.25 } }
+      ]
+    },
+
+    // --- 謎の商人が売る加護（買うまで選択肢に出ない） ---
+    //
+    // 上の9つより一段強い。そのぶん weight は低めにして、
+    // 買っても「毎回これが出る」とはならないようにしてある。
+
+    thunderCall: {
+      id: "thunderCall",
+      name: "雷鳴の呼び声",
+      description: "雷属性の技で与えるダメージが20%増える。",
+      weight: 0.5,
+      locked: true,
+      price: 300,
+      effects: [ { type: "damageDealt", value: 1.20, element: "thunder" } ]
+    },
+
+    duskPact: {
+      id: "duskPact",
+      name: "宵闇の契り",
+      description: "闇属性の技で与えるダメージが20%増える。",
+      weight: 0.5,
+      locked: true,
+      price: 300,
+      effects: [ { type: "damageDealt", value: 1.20, element: "dark" } ]
+    },
+
+    deepVein: {
+      id: "deepVein",
+      name: "深き血脈",
+      description: "仲間全員のHPが15%上がる。",
+      weight: 0.4,
+      locked: true,
+      price: 500,
+      effects: [ { type: "statMultiplier", stat: "hp", value: 1.15 } ]
+    },
+
+    twinEdge: {
+      id: "twinEdge",
+      name: "双つの刃",
+      description: "仲間全員の攻撃が15%上がるかわりに、受けるダメージも10%増える。",
+      weight: 0.35,
+      locked: true,
+      price: 560,
+      effects: [
+        { type: "statMultiplier", stat: "attack", value: 1.15 },
+        { type: "damageTaken", value: 1.10 }
+      ]
+    },
+
+    abyssBoon: {
+      id: "abyssBoon",
+      name: "深淵の恵み",
+      description: "仲間全員の与えるダメージが12%増え、受けるダメージが12%減る。",
+      weight: 0.25,
+      locked: true,
+      price: 900,
+      effects: [
+        { type: "damageDealt", value: 1.12 },
+        { type: "damageTaken", value: 0.88 }
+      ]
+    },
+
+    // --- 第一章クリア後に謎の商人が売る加護（腐食の毒沼をクリアすると並ぶ） ---
+    //
+    // α-9 のテストプレイで、クリア時にお金が余ったため足した（効果・値段・出やすさは作者が決めたもの）。
+    // 出やすさは weight で決まる（data/run.js の rarityTiers：1.0 よく出る／0.7 ふつう／0.5 少ない／それ未満 まれ）。
+    // 水・地・風は、火・光（最初から）と雷・闇（商人）にそろえた属性の加護。
+    // 残りの4つは特性と同じ仕組みの効果を、仲間全員に掛ける版（data/abilities.js の説明を参照）
+
+    waterVein: {
+      id: "waterVein",
+      name: "水脈の恵み",
+      description: "水属性の技で与えるダメージが20%増える。",
+      weight: 1.0,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 300,
+      effects: [ { type: "damageDealt", value: 1.20, element: "water" } ]
+    },
+
+    earthEcho: {
+      id: "earthEcho",
+      name: "大地の響き",
+      description: "地属性の技で与えるダメージが20%増える。",
+      weight: 1.0,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 300,
+      effects: [ { type: "damageDealt", value: 1.20, element: "earth" } ]
+    },
+
+    windWhisper: {
+      id: "windWhisper",
+      name: "風のささやき",
+      description: "風属性の技で与えるダメージが20%増える。",
+      weight: 1.0,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 300,
+      effects: [ { type: "damageDealt", value: 1.20, element: "wind" } ]
+    },
+
+    drainFang: {
+      id: "drainFang",
+      name: "吸う牙",
+      description: "通常攻撃で与えたダメージの15%だけ、HPが回復する。",
+      weight: 0.25,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 1500,
+      effects: [ { type: "drain", value: 0.15, normalAttackOnly: true } ]
+    },
+
+    lifeLamp: {
+      id: "lifeLamp",
+      name: "命の灯",
+      description: "毎ターンの終わりに、HPが最大値の8%回復する。",
+      weight: 0.7,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 1000,
+      effects: [ { type: "regen", value: 0.08 } ]
+    },
+
+    ironWall: {
+      id: "ironWall",
+      name: "鉄壁の構え",
+      description: "HPが半分以上のあいだ、受けるダメージが15%減る。",
+      weight: 0.5,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 1350,
+      effects: [ { type: "damageTaken", value: 0.85, condition: { hpAbove: 0.5 } } ]
+    },
+
+    swiftStart: {
+      id: "swiftStart",
+      name: "疾き初手",
+      description: "戦闘の最初のターンだけ、仲間全員が先に動く。",
+      weight: 0.5,
+      locked: true,
+      unlockedBy: "venomMarsh",
+      price: 1000,
+      effects: [ { type: "firstStrike" } ]
+    },
+
+    // --- 蔦這う回廊をクリアすると謎の商人が売る加護（作者の指定 2026-10-27）---
+    //
+    // 回廊で味わった「動きを奪われる」への備えと、萌芽の穴の特性（脱皮・放電・追い風）を仲間全員に掛ける版。
+    // 効果・値段は作者が決めたもの。出やすさ（weight）は私の案で作者が確定（2026-10-28。高いものほど出にくくしてある）
+    // ★ 効果が同じ種類の特性を持つ仲間がいるとき：
+    //   逆巻く雷は放電（20%）と別々に判定する（BattleSystem._applyCounterStatus が見つかった効果を全部回す）。
+    //   解き放ち・抜け風は特性と重ならず、どちらか1つだけが働く（_findEffect が最初の1つを返す）
+
+    ivyWard: {
+      id: "ivyWard",
+      name: "蔦払い",
+      description: "仲間全員の麻痺・眠り・封印の耐性が4上がる。",
+      weight: 0.7,
+      locked: true,
+      unlockedBy: "ivyCorridor",
+      price: 750,
+      effects: [
+        { type: "resistBonus", status: "paralysis", value: 4 },
+        { type: "resistBonus", status: "sleep", value: 4 },
+        { type: "resistBonus", status: "seal", value: 4 }
+      ]
+    },
+
+    breakFree: {
+      id: "breakFree",
+      name: "解き放ち",
+      description: "ターンの終わりに状態異常に掛かっていると、35%で自分で治す。",
+      weight: 0.5,
+      locked: true,
+      unlockedBy: "ivyCorridor",
+      price: 1000,
+      effects: [ { type: "shedStatus", chance: 0.35 } ]
+    },
+
+    backlashThunder: {
+      id: "backlashThunder",
+      name: "逆巻く雷",
+      description: "攻撃を受けると、20%で相手を麻痺させる。",
+      weight: 0.5,
+      locked: true,
+      unlockedBy: "ivyCorridor",
+      price: 1200,
+      effects: [ { type: "counterStatus", status: "paralysis", chance: 0.2, trigger: "hit" } ]
+    },
+
+    // 特性「追い風」は2倍。加護は作者の指定で 1.88倍（2倍より少し弱く）
+    slipWind: {
+      id: "slipWind",
+      name: "抜け風",
+      description: "戦闘の最初の2ターン、仲間全員の素早さが1.88倍になる。",
+      weight: 0.35,
+      locked: true,
+      unlockedBy: "ivyCorridor",
+      price: 1500,
+      effects: [ { type: "tailwind", value: 1.88, turns: 2 } ]
+    }
+  };
+})(window.MyGame);

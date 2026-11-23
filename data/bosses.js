@@ -1,0 +1,415 @@
+/**
+ * bosses.js
+ * ボスの定義。どのダンジョンに出るかは data/dungeons.js の boss で指定する。
+ *
+ * species     : 種族id（monsters.js を参照。ボス専用の種族を作ってもよい）
+ * level       : レベル
+ * title       : 表示名（省略時は種族名）
+ * isFinal     : 倒すとエンディングになるか
+ *
+ * ▼ 逃走はボス個別の設定にしていない。
+ *   主の戦いからは共通して逃げられない（data/battle.js の bossCanFlee）。
+ *   以前はボスごとに canFlee を書いていたが、
+ *   ボスを足すたびに書き忘れると逃げられる主ができてしまうため、1か所にまとめた。
+ *
+ * ▼ isFinal はいま全ボスが false。
+ *   ステージ4以降を作っている途中で、深層の主はまだ「終わり」ではない。
+ *   エンディングは進行データを消してタイトルへ戻すので、
+ *   ここを true にするのはゲームが本当に終わるボスができてから。
+ *
+ * ▼ scoutableWhen : 誘えるようになる条件。書かなければ一生誘えない。
+ *   data/dungeons.js の unlockedBy と同じ書き方ができる（判定も同じ仕組み）。
+ *     "mossyMine"          … そのダンジョンをクリアしていれば誘える
+ *                             ＝ 一度倒してから、2度目の挑戦で仲間にできる
+ *     { region: "cradle" } … その地方を全部クリアしてから（＝地方解放後）
+ *     true                 … 最初から誘える
+ *   いまは全ボスを「2度目の挑戦から」にしてある。
+ *   あとから「地方解放後」に変えたいボスは、その1行を書き換えるだけでよい。
+ *
+ * ▼ statMultiplier : 主として立ちはだかっているあいだだけ掛かる倍率。
+ *   { hp, attack, defense, speed, pp } のうち書いたものだけが効く（省略で等倍）。
+ *
+ *   ボスを強くするのに基礎値を上げると、仲間にしたときまで強くなってしまう。
+ *   レベルを上げて強くすると、経験値とゴールドが
+ *   「基準 × (1 + (Lv-1) × 0.15)」で一緒に膨らみ、レベルが走りすぎる。
+ *   だから「立ちはだかる相手としての強さ」だけをここで足す。
+ *   スカウトして仲間になった個体には引き継がれない。
+ *
+ * ▼ 効かない状態異常は data/battle.js の bossImmuneToStatus（全ボス共通）。
+ *   逃走（bossCanFlee）と同じで、ボスごとに書くと足すときに書き忘れるため1か所にまとめてある。
+ *   いまは 即死・封印・盲目 の3つ。理由はそのファイルのコメントを参照。
+ *   statMultiplier と同じで、仲間に迎えたときはその種族そのままの耐性に戻る。
+ *
+ *   immuneToStatus : その主だけに足したいものがあるときだけ書く（共通のぶんと両方が効く）。
+ *
+ *   ★ いまの4体は全員 poison を持っている（＝毒も効かない）。
+ *     毒のダメージは最大HPの1/8で、上限は50（data/statuses.js の turnDamage.max）。
+ *     いまの主はHP111〜431なので、毒1つで1ターンあたり12%削れてしまい、
+ *     倍率と行動手順で詰めた戦いが別物になる。
+ *     HPが4桁まで伸びる相手（上限50なら5%以下）が出てきたら、その主には書かなくてよい。
+ *
+ * ▼ actionPattern : 決まった順番で行動させる手順。書かなければ今までどおり、
+ *   data/battle.js の enemyAi.skillRate に従って確率で技を選ぶ。
+ *
+ *   技idを並べる。"wait" と書くと、そのターンは何もしない。
+ *   v1.0.0 から、1手を次の形でも書ける（BattleSystem._patternAction）：
+ *     { skill: "normalAttack", critical: true } … 必ずクリティカル
+ *     { choice: [{ weight: 0.5, skill: "…" }, { weight: 0.5, skill: "…" }] } … その手番ごとに重みで1つ選ぶ
+ *   最後まで行くと先頭に戻る。戦闘のたびに先頭から始まる。
+ *
+ *   動きが読めるようになるので、覚えれば対処できる相手にできる。
+ *   何もしないターンを混ぜると、こちらが立て直す隙にもなる。
+ *   PPが足りない技に当たったターンは通常攻撃に落ちるが、順番は進む。
+ *
+ * ▼ infinitePp : true なら、主のあいだ PP が減らない（v1.3.0。出現の表の infinitePp と同じ。仲間にすると外れる）
+ *
+ * ▼ actionsPerTurn : 1ターンに動く回数 { min, max }（v1.3.0）。毎ターンこの幅で引き直す（{ min:1, max:2 } なら半々）。
+ *   2回目は1回目のすぐ後に続けて動き、行動はそのときに決め直す（BattleSystem.takeTurn）。
+ *   眠ったら残りの手番は無い。麻痺は手番ごとに判定する。actionPattern があれば1回ごとに1手進む。
+ *
+ * ▼ scoutLevel : 仲間になったときのレベル。
+ *   省略すると data/scout.js の bossJoinLevel（現在は1）。
+ *   ボスは高いレベルで戦うので、そのまま仲間にすると強すぎる。育て直す形にする。
+ *   性格と個体値は戦った個体のものを引き継ぐ（レベルだけ下がる）。
+ *
+ * ★ ボスを増やすときは、ここに1エントリ足して
+ *   dungeons.js の boss からそのidを指すだけでよい。
+ */
+(function (NS) {
+  "use strict";
+
+  NS.rawData.bosses = {
+    mineKeeper: {
+      id: "mineKeeper",
+      species: "mossGolem",
+      level: 8,
+      // 基礎値（HP30 攻8 防11 速3 PP4）に掛けて、Lv8で HP104 攻27 防28 速7 PP8 になる。
+      // 以前は基礎値だけで 102/28/28/8 にしていたので、
+      // 仲間にするとLv1でHP50・防御14という格外の強さになっていた。
+      //
+      // 端数の多い数字なのは、種族の成長率を項目ごとに分けた（守り重視・足は遅い）ぶんを
+      // ここで吸い直して、Lv8の主だけは以前と同じ強さに保っているため。
+      // 主の強さを変えたいときは、この倍率だけを触ればよい
+      statMultiplier: { hp: 1.59, attack: 1.71, defense: 1.10, speed: 1.57, pp: 1.18 },
+      // HP111。毒（1/8）が入ると13/ターンで、詰めた戦いが崩れる
+      immuneToStatus: ["poison"],
+      title: "坑道の主",
+      scoutableWhen: "mossyMine",
+      isFinal: false
+    },
+
+    blazeBeast: {
+      id: "blazeBeast",
+      species: "magmaBeast",
+      // 亀裂の敵はLv5〜10。主だけ極端に高くすると、報酬（レベルで増える）も
+      // 一気に膨らんでレベルが走りすぎるので、少し上に置くだけにしてある
+      level: 12,
+      // 基礎値（HP35 攻16 防8 速7 PP6）に掛けて、Lv12で HP208 攻42 防29 速14 PP31 になる。
+      // 速さを落としてあるのは、大きく重い獣らしくするため。
+      //
+      // 攻撃の倍率は「Lv12 で攻撃42」に合わせるためのもの。
+      // 前は種族の攻撃の成長率が 0.19 で素のままだと49になるので 0.85 で打ち消していた。
+      // 2026-10-20 に種族の成長率を 0.14 に下げた（仲間にしたときに強すぎたため）ので、素のままだと40。
+      // 1.04 を掛けて同じ42に戻してある（主の強さは前と同じ）
+      statMultiplier: { hp: 2.16, attack: 1.04, defense: 1.65, speed: 0.70, pp: 2.13 },
+      // HP208。毒が入ると26/ターン
+      immuneToStatus: ["poison"],
+      // 5ターンで一巡する。息を吐いた直後に殴ってくる。
+      // v1.4.4（2026-11-14 作者の指定）：3手目の「待つ」を通常攻撃にした（休む番が無くなった）。
+      // 共鳴・ブレスの攻撃力の係数を下げて（共鳴 0.15・ブレス 0.10）、火の息とファイアが弱くなったぶんを戻すため
+      actionPattern: [
+        "fireBreath",    // 全体を焼く
+        "normalAttack",
+        "normalAttack",  // v1.4.4 まで "wait"
+        "ember",         // 1体を強く焼く
+        "normalAttack"
+      ],
+      title: "灼熱の獣",
+      scoutableWhen: "scorchingFissure",
+      isFinal: false
+    },
+
+    abyssKing: {
+      id: "abyssKing",
+      species: "kingSlime",
+      // 深層の敵はLv10〜15、推奨レベルは16。主はその少し上に置く。
+      // 以前は28で、階の敵とも推奨レベルとも噛み合っていなかった
+      // （レベルを上げると報酬まで膨らむので、強さは倍率で作る）
+      level: 18,
+      // 基礎値（HP28 攻10 防10 速4 PP7）に掛けて、
+      // Lv18で HP370 攻52 防40 速14 PP36 になる。
+      // HPの倍率だけ極端に大きいのは、王を「長く殴り続ける相手」にするため
+      statMultiplier: { hp: 3.13, attack: 1.47, defense: 1.03, speed: 1.60, pp: 1.61 },
+      // HP370。毒が入ると46/ターンで、味方3体の1ターン火力の8割に届く
+      immuneToStatus: ["poison"],
+      // 5ターンで一巡する。重い一撃が2回来るが、そのあいだに通常攻撃が挟まる。
+      // 読み切れば「ボディプレスの番だけ防御する」という戦い方ができる
+      actionPattern: [
+        "bodyPress",     // 重い一撃
+        "normalAttack",
+        "aqua",          // 水の王らしい一手
+        "bodyPress",
+        "normalAttack"
+      ],
+      title: "深層の主",
+      scoutableWhen: "silentDepths",
+      // ステージ3の主だが、ここで終わりではないのでエンディングへは進めない。
+      // 倒すと「クリア扱いにして拠点へ帰る」という、他の主と同じ流れになる
+      isFinal: false
+    },
+
+    /**
+     * 腐食の毒沼の主（ステージ4・推奨Lv20）。
+     *
+     * ★ 倍率は「深層の主と同じ手応え」になるところへ合わせてある。
+     *   道具も加護も装備も使わない素の3体で殴り合わせたとき、
+     *   深層の主が29%、この倍率で27%。
+     *   （その測り方は辛めに出るので、絶対値ではなく既存との比較で見ること）
+     *
+     * ★ 行動手順は「毒を撒いてから殴る」。
+     *   1手目のどくのいきで全体に毒が入り、以後はターンごとに削られる。
+     *   解毒草を持ってきたかどうかが、そのまま長期戦の可否になる。
+     *   何もしないターン（wait）を1つ混ぜて、立て直す隙を残してある。
+     */
+    swampLord: {
+      id: "swampLord",
+      species: "marshLord",
+      // 在来種はLv14〜19。主はその少し上（推奨Lv20の1つ上）に置いてある。
+      //
+      // ★ Lv24 から下げたぶんは倍率で補ってある
+      //   （レベルだけ下げると勝率23%→67%まで緩んでしまうため）。
+      //
+      // ★ 防御は低く、攻撃とPPを厚くしてある。
+      //   硬くして殴り合いを長引かせるのではなく、
+      //   「柔らかいが痛い」＝ 早く倒さないとこちらが先に潰れる形。
+      //   PP2.6 は、どくのいき（PP3）を最後まで撃ち切らせるため。
+      //
+      // ★ HP倍率だけは触ると急に効く。
+      //   防御が低いぶん、こちらの火力がそのまま通って「何ターンで倒せるか」が
+      //   HPだけで決まるため。実測（味方Lv20の素の3体）：
+      //     3.25 → 62%   3.60 → 48%   3.80 → 31%   4.00 → 25%
+      //   深層の主が22〜25%なので、そのすぐ上に置いてある。
+      //   ここを動かすときは 0.1 刻みで測り直すこと
+      level: 21,
+      statMultiplier: { hp: 3.85, attack: 1.75, defense: 1.11, speed: 1.5, pp: 2.6 },
+      // 毒はこいつが出しているので効かない（HP431で上限の50/ターンに達する）
+      immuneToStatus: ["poison"],
+      // 覚えている技をひととおり回す。通常攻撃は1回だけ。
+      //
+      // ★ 通常攻撃を並べると主が弱くなる。
+      //   威力0の単体攻撃なので、1ターンあたりのダメージが最小の手になるため。
+      //   実測（味方4体・回復役つき）で、通常攻撃3回のローテだと
+      //   終了時HPが48%も残り「回復役1体で足りる」戦いになっていた。
+      //   あわ（全体）を1回入れるだけで28%まで落ちる。
+      //   全体技は3体に届くので、1ターンの総量が通常攻撃の約3倍になる
+      actionPattern: [
+        "bodyPress",     // 重い一撃
+        "bubble",        // 全体に泡（ここがいちばん効く）
+        "venomBreath",   // 全体に毒を撒く
+        "bite",          // 単体を追い込む
+        "normalAttack"   // 谷。ここで立て直させる
+      ],
+      title: "沼の主",
+      scoutableWhen: "venomMarsh",
+      isFinal: false
+    },
+
+    /**
+     * 萌芽の穴・若葉の洞の主「ヒコバエ」（v1.0.0。推奨Lv22）。強さ・耐性・特性・行動・名前は作者が決めたもの（2026-10-08）。
+     *
+     * ★ 最初の強さの目標：若葉の洞の装備を着けたLv26の3体で、勝率15〜20%（同じ物差しで沼の主は19%）。
+     *   そのあと作者が「難易度は上げる方針」で、主として出たときの値を直接決めた（下の statMultiplier）。
+     *   揺籃の穴の主は「10段階で1」。次の地方からは2〜4（作者の方針）。装備が強くなったぶんを倍率で受け止める。
+     *   balance-sim.html（スライム・フレイミン・ビリムシ Lv26、若枝の剣・苔甲の鎧・眠りよけの鈴・若葉の羽飾り）で測った：
+     *     HP倍率 2.6 → 43%   2.8（攻1.6）→ 40%   3.0 → 21%   3.05 → 17%   3.1 → 15%   3.2 → 10%
+     *   沼の主と同じく、HP倍率が急に効く。動かすときは 0.05 刻みで測り直すこと。
+     *   この表は種族の値が決まる前に測ったもの。いまの値（下の statMultiplier）での勝率は README の主の欄
+     * ★ 効かない状態異常：毒・眠り（＋全部の主に共通の即死・封印・盲目）。麻痺は種族の耐性 +9 でほぼ効かない
+     * ★ 行動手順（6手で一巡）：
+     *   ルートスパイク（全体・地）→ 眠りの息（全体・眠り35%）→ 通常攻撃
+     *   → 50% 必ずクリティカルの通常攻撃 ／ 50% ゲイル（全体・風）
+     *   → 幻惑の瞳（1体を盲目60%）→ 60% ミステリーダンス（1体のPPを3〜7減らす）／ 40% やくそう（自分を20回復）
+     */
+    hollowLord: {
+      id: "hollowLord",
+      species: "sproutLord",
+      level: 26,
+      // ★ 2026-10-08 作者が値を決め直した（ヒコバエの資料）。種族の値も決まり、
+      //   主として出たときの目標値 HP925 攻101 防56 速34 PP150（性格「素直」・個体値0）に、ちょうどなる倍率にしてある。
+      //   （資料の目安 6.61/1.75/1.48/1.14/4.42 は「切り捨てで目標値になる」目安。結果が同じになる最小の値を探して置いた）
+      statMultiplier: { hp: 6.577, attack: 1.739, defense: 1.474, speed: 1.13, pp: 4.401 },
+      immuneToStatus: ["poison", "sleep"],
+      actionPattern: [
+        "rootSpike",
+        "sleepBreath",
+        "normalAttack",
+        { choice: [
+          { weight: 0.5, skill: "normalAttack", critical: true },
+          { weight: 0.5, skill: "gale" }
+        ] },
+        "dazzleEye",
+        { choice: [
+          { weight: 0.6, skill: "mysteryDance" },
+          { weight: 0.4, skill: "bossHerb" }
+        ] }
+      ],
+      title: "ヒコバエ",
+      scoutableWhen: "sproutHollow",
+      isFinal: false
+    },
+
+    /**
+     * 萌芽の穴・千年樹の根底の主「カラクリモリ」（v1.3.0。名前は作者が確定 2026-11-10）。萌芽の穴の最後の主。
+     * ★ 作者が決めたもの（2026-11-01〜03）：Lv32・主のとき HP1050 攻135 防65 速40・PP無限・1ターンに1〜2回・仲間にできる・
+     *   効かない状態異常は毒と麻痺（＋全部の主に共通の即死・封印・盲目。眠り・呪いは効く）・特性 放電・行動の順番。
+     *   「最序盤最後のヌシなだけあってかなり強めにしたい」（作者）
+     * ★ 行動手順（9手で一巡。1ターンに2回動くと2手進む）：
+     *   鼓舞の舞（自分の攻撃を上げる）→ 鎧くずし（1体の防御を下げる）→ いなずま（全体・雷）
+     *   → 50% 威圧の咆哮（全体の攻撃を下げる）／ 50% こうか（自分の防御を上げる）
+     *   → 70% ボルト（全体・雷・麻痺15%）／ 30% ちからため → 通常攻撃（ためていれば約2倍）
+     *   → しびれ粉（全体を麻痺45%）→ 歯車投げ（斬撃 ×0.7 を3回、1回ごとにでたらめな相手）→ ようすをみる
+     */
+    rootsWarden: {
+      id: "rootsWarden",
+      species: "gearWarden",
+      level: 32,
+      // 主として出たときの値 HP1050 攻135 防65 速40 PP150（性格「素直」・個体値0）に、ちょうどなる倍率（2026-11-03 作者が決めた）。
+      // 種族の成長率が変わったら、同じ値になるように測り直す
+      statMultiplier: { hp: 5.570, attack: 1.953, defense: 0.837, speed: 1.33, pp: 3.80 },
+      immuneToStatus: ["poison", "paralysis"],
+      infinitePp: true,
+      actionsPerTurn: { min: 1, max: 2 },
+      actionPattern: [
+        "rallyDance",
+        "armorBreak",
+        "lightning",
+        { choice: [
+          { weight: 0.5, skill: "intimidRoar" },
+          { weight: 0.5, skill: "harden" }
+        ] },
+        { choice: [
+          { weight: 0.7, skill: "volt" },
+          { weight: 0.3, skill: "chargeUp" }
+        ] },
+        "normalAttack",
+        "numbPowder",
+        "gearThrow",
+        "wait"
+      ],
+      title: "カラクリモリ",
+      scoutableWhen: "ancientRoots",
+      isFinal: false
+    }
+  };
+
+  /**
+   * クロニクル杯（v1.5.0。物語は data/story.js の場面14〜18。scenario_yosen.md）。
+   *
+   * ▼ 予選（qualifier）… 3戦の勝ち抜き（作者が確定 2026-11-18）
+   *   入口は「ダンジョンへ潜る」の穴の一覧の下（穴とは分けて置く。DungeonSelectScene）。
+   *   流れは NS.Qualifier（js/scenes/DungeonSelectScene.js）：
+   *     確認「予選に向かいますか？」→ 場面14（はじめてのときだけ）→ 1戦目 → 場面15 → 2戦目 → 場面16 → 3戦目 → 場面17（一度だけ）
+   *   ・戦いの合間に、仲間の HP・PP・状態異常を全部戻す（協会の者が手当て。作者が確定）
+   *   ・逃げる・誘うはできない（作者が確定）。道具も使えない（相手も使わないので。作者の指定 2026-11-18。BattleScene の allowItems: false）
+   *   ・負けても何も失わない（ダンジョンの外なので、持ち物を落とす決まりが掛からない）。場面18を流して拠点へ。何度でも挑める
+   *   ・勝っても経験値・ゴールドは 0、落とし物も無い（作者の指定 2026-11-18。rewardMultiplier: 0 と BattleScene の drops: false）
+   *   ・勝ち抜いた印は doneEvents の qualifierEvent（セーブに残る）。勝ち抜いたあとは入口が「本戦」になる（いまは準備中）
+   *
+   *   unlockedBy … 入れるようになる条件（dungeons.js の unlockedBy と同じ書き方）
+   *   shownWhen  … 一覧に出す条件。満たしていても unlockedBy がまだなら、灰色で「主を6体記録すると開く」
+   *   recommendedLevel … 拠点のひと言と、右の説明に出す目安
+   *
+   * ▼ battles … 1戦ずつ。相手の連れているモンスターは、出現の表の1件と同じ書き方
+   *   （EncounterSystem.createEnemyFrom。species・minLevel・maxLevel・skills・skillWeights・statMultiplier など）
+   *   bgm   … その戦いの曲（data/audio.js の bgm）
+   *   intro … 戦いの始まりのひと言（data/messages.js の qualifier から引くので、ここは文言のキー）
+   *
+   * ★ 3戦とも作者が確定（2026-11-18）。もとは仮で置いていた（scenario_yosen.md の「相手の案」に沿って私が置いた）：
+   *   1戦目 Lv29〜30 揺籃の在来種3体（肩慣らし）… 作者が確定（2026-11-18）：この3体・補正なし・性格は素直と個体値0で固定。
+   *           揺籃で手に入る装備を持たせた（作者が了承）。愛情度は「出会い」・行動はふつうの敵と同じ（技は 25%）
+   *   2戦目 … 作者が確定（2026-11-18）：揺籃と萌芽の3体（ユラツボミ・ヌマボネ・ヒカリムシ）。Lv32・愛情度「慣れ」（30）・
+   *           性格と装備と技と作戦は作者の指定。個体値は0。人が育てた相手なので、作戦で毎手番動く（skillRate: 1）
+   *   3戦目 … 作者が確定（2026-11-18）：マグマウルフ（主の種族）・ザンガルド・コハクカブト。Lv34・信頼。主としての補正は掛けていない（連れているモンスターなので）
+   *   技は、そのレベルまでに覚える技から選んだ（敵のときだけの技は使わない）。主のような決まった手順は無い
+   */
+  NS.rawData.tournament = {
+    qualifier: {
+      id: "qualifier",
+      name: "クロニクル杯　予選",
+      finalName: "クロニクル杯　本戦",
+      unlockedBy: "ancientRoots",
+      shownWhen: { region: "cradle", count: 4 },
+      recommendedLevel: 32,
+      qualifierEvent: "chronicleQualifier",
+      // 相手の経験値・ゴールドの倍率（0 で何も入らない。作者の指定 2026-11-18）
+      rewardMultiplier: 0,
+      // 物語（data/story.js）
+      scenes: { first: "qualifierMorning", afterWin: ["qualifierWin1", "qualifierWin2"], passed: "qualifierPassed", lost: "qualifierLost" },
+      // 戦いの背景（BattleScene の scenery。dungeonThemes の battle と同じ書き方）。白い砂の床
+      scenery: {
+        gradientTop: "#46618c",
+        gradientBottom: "#b8a47c",
+        groundY: 346, groundColor: "#cdbb92", edgeColor: "#efe3c4",
+        particles: {
+          count: 18, color: "#f4ead2", minSize: 1, maxSize: 2,
+          minSpeed: -6, maxSpeed: -2, minAlpha: 0.10, maxAlpha: 0.35,
+          minDriftX: 4, maxDriftX: 14
+        }
+      },
+      battles: [
+        { bgm: "taikaiBattle", intro: "intro1", team: [
+          // 1戦目は作者が確定（2026-11-18）。補正なし・性格は素直・個体値0で固定（負けて挑み直しても同じ相手）。装備は揺籃のもの
+          { species: "flamin", minLevel: 30, maxLevel: 30, nature: "balanced", ivs: 0, skills: ["flame", "armorBreak", "doubleSlash", "powerResonance"],
+            equipment: ["blazeCharm", "scorchedShellArmor", "emberRing"] },
+          { species: "rocky",  minLevel: 29, maxLevel: 29, nature: "balanced", ivs: 0, skills: ["rockSpike", "wardSongEarth", "guardSong"],
+            equipment: ["marshSpear", "mireArmor"] },
+          { species: "batty",  minLevel: 29, maxLevel: 29, nature: "balanced", ivs: 0, skills: ["drainBite", "doubleSlash", "galeSong", "armorBreak"],
+            equipment: ["abyssFang", "mossCharm", "swiftPlume"] }
+        ] },
+        // 2戦目は作者が確定（2026-11-18）。Lv32・慣れ・個体値0。作戦で毎手番動く（skillRate: 1）
+        { bgm: "taikaiBattle", intro: "intro2", team: [
+          // 忍耐 200/44/86/38/70。仲間を守る。手当てが要らない番はララバイ（補助。作者の指定 2026-11-18）
+          { species: "yuraTsubomi", minLevel: 32, maxLevel: 32, nature: "sturdy", ivs: 0, affection: 30,
+            skills: ["lullaby", "cleanse", "wakeSong", "greaterCure"],
+            equipment: ["sleepStaff", "mossShellArmor", "slimeNecklace", "spiritRing"],
+            skillRate: 1, tactic: "protect", tacticOverrides: { support: true } },
+          // 勇敢 129/122/62/42/49（作者の表は 134/65/44 だったが、ゲームの計算に合わせた＝作者の指定）。補助中心と全力で攻めるを交互
+          { species: "marshBone",   minLevel: 32, maxLevel: 32, nature: "brave", ivs: 0, affection: 30,
+            skills: ["sealSong", "curseSong"],
+            equipment: ["rootboundSpear", "duskDewCloak", "travelerCharm", "venomCrown"],
+            // 補助の番はサイレスと不吉な舞を半々（作者の指定 2026-11-18「サイレスも使わせよう」）
+            skillRate: 1, tactic: { cycle: ["support", "attack"] }, supportWeights: { sealSong: 0.5, curseSong: 0.5 } },
+          // 短気 144/93/58/119/72。全力で攻める 2・補助中心 1。
+          // 攻める技はシャインだけ（作者の指定 2026-11-18。前はフラッシュ 0.6・シャイン 0.4）。ディンド → ブレイブ（同日）。
+          // ブレイブはヌマボネだけへ（作者の指定 2026-11-18。シャインは共鳴なので自分にかけても強くならない）
+          { species: "glowBug",     minLevel: 32, maxLevel: 32, nature: "swift", ivs: 0, affection: 30,
+            skills: ["shine", "fightSong", "galeSong"],
+            equipment: ["sproutBlade", "windChimeVest", "glowLantern", "leafPlume"],
+            skillRate: 1, tactic: { weights: { attack: 2, support: 1 } },
+            buffTargets: { fightSong: ["marshBone"] } }
+        ] },
+        // 3戦目は作者が確定（2026-11-18）：主の種族マグマウルフを入れた山場。Lv34・愛情度「信頼」（90）・個体値0・作戦で毎手番動く。
+        // 遊んで難しかったので、属性の与ダメを重ねていた装飾品を1体1つずつ外した（燃え殻の指輪・帯電の芯。作者の指定 2026-11-19）
+        { bgm: "taikaiBattle", intro: "intro3", team: [
+          // 勇敢 225/142/78/97/34。全力で攻める 3・補助中心 1（威圧の咆哮・ハウリング。作者の指定 2026-11-18）
+          { species: "magmaBeast",    minLevel: 34, maxLevel: 34, nature: "brave", ivs: 0, affection: 90,
+            skills: ["flame", "fireBreath", "intimidRoar", "powerResonance"],
+            equipment: ["flameFangTachi", "clearGaleVest", "hunterFangCharm"],
+            skillRate: 1, tactic: { weights: { attack: 3, support: 1 } } },
+          // 短気 198/136/89/99/41。全力で攻める。技は稲妻斬りだけ（作者の指定 2026-11-18）。
+          // 稲妻斬りと通常攻撃を半々で使う（作者の指定 2026-11-21＝attackWeights）
+          { species: "thunderDragon", minLevel: 34, maxLevel: 34, nature: "swift", ivs: 0, affection: 90,
+            skills: ["thunderSlash"],
+            equipment: ["roaringThunderBlade", "clockworkVest", "jadeWindPlume"],
+            skillRate: 1, tactic: "attack", attackWeights: { thunderSlash: 0.5, normalAttack: 0.5 } },
+          // 忍耐 239/105/145/42/38。補助中心（堅守の陣・シールド・ブレイブ。攻める番はボディプレス＝作者の指定 2026-11-18）。ブレイブはマグマウルフかザンガルドへ
+          { species: "amberBeetle",   minLevel: 34, maxLevel: 34, nature: "sturdy", ivs: 0, affection: 90,
+            skills: ["bodyPress", "fightSong", "guardSong", "fortressForm"],
+            equipment: ["rootboundSpear", "amberArmor", "wraithBell", "sapCharm"],
+            skillRate: 1, tactic: "support",
+            buffTargets: { fightSong: ["magmaBeast", "thunderDragon"] } }
+        ] }
+      ]
+    }
+  };
+})(window.MyGame);

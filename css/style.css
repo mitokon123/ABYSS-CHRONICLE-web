@@ -1,0 +1,75 @@
+/* style.css : 画面まわりの最小限のスタイル。ゲーム本体は Canvas に描画する。 */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #05070d;
+  color: #e8eaf0;
+  font-family: monospace;
+  /* スマホ（v1.7.0）：ページごと動いたり、長押しで文字を選んだりしないように */
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/*
+ * 画面の大きさ（v1.7.0）。中身は 800×600 のまま、見せる大きさだけ窓に合わせる（縦横の比はそのまま）。
+ * PC で窓が大きいときは今までどおり 800×600（大きくするとにじむので）。窓が小さい・スマホのときは縮める。
+ * マウスと指の位置は Input が見せている大きさから直すので、どの大きさでもずれない
+ */
+#game {
+  box-sizing: border-box;
+  width: min(804px, 100vw, calc(100dvh * 4 / 3));
+  height: auto;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border: 2px solid #2a3350;
+  image-rendering: pixelated; /* ドット絵をくっきり表示する */
+  touch-action: none;         /* 指でなぞってもページを動かさない（Input が受ける） */
+}
+
+/* 指で遊ぶ端末では枠を消して、画面いっぱいに */
+@media (hover: none) and (pointer: coarse) {
+  #game { border: none; width: min(100vw, calc(100dvh * 4 / 3)); }
+}
+
+/* 縦向きのスマホ：横にしてもらう（v1.7.0） */
+#rotate { display: none; }
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  #app { display: none; }
+  #rotate {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    height: 100dvh;
+    color: #ffd75e;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+  }
+  .rotate-icon {
+    width: 40px;
+    height: 64px;
+    border: 3px solid #e8eaf0;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    animation: rotate-hint 2.4s ease-in-out infinite;
+  }
+}
+@keyframes rotate-hint {
+  0%, 30%   { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(-90deg); }
+}
