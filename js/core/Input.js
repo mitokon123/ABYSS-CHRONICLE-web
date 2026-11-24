@@ -109,6 +109,7 @@
       if (e.button === 0) {
         self._pointerBuffer.clicked = true;
         self.pointer.down = false;
+        self._tapNow();
       }
     });
 
@@ -195,6 +196,7 @@
         if (e.button === 0) {
           buffer.clicked = true;
           self.pointer.down = false;
+          self._tapNow();
         }
         self._gesture();
         return;
@@ -206,6 +208,7 @@
       if (!t.dragged) {
         buffer.moved = true;
         buffer.clicked = true;
+        self._tapNow();
       }
       self._touch = null;
       self._touchReleased = true;
@@ -239,6 +242,21 @@
 
     // 右クリック・長押しのメニューは出さない（右クリックは取り消しとして使うため）
     canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  };
+
+  /**
+   * 押して離したその瞬間（ブラウザのイベントの中）に呼ぶ処理を1つ決める（v1.7.1）。null で外す。
+   * iOS の Safari は、ファイルを選ぶ窓を「押した操作のイベントの中」でしか開かない。
+   * ゲームの更新（update）は次のフレームなので、そこで開くと何も起きなかった（スマホでファイルを読み込めなかった）。
+   * @param {function(number, number)|null} fn 押した位置（キャンバスの座標）を受け取る
+   */
+  Input.prototype.setTapHandler = function (fn) {
+    this._tapHandler = fn || null;
+  };
+
+  Input.prototype._tapNow = function () {
+    if (!this._tapHandler) return;
+    try { this._tapHandler(this.pointer.x, this.pointer.y); } catch (e) { /* 遊びは止めない */ }
   };
 
   /** 最初の操作を知らせる（音。Game が onGesture を入れる） */

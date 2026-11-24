@@ -2425,6 +2425,116 @@
      *   ③ 包み終わると膜の上を光が走り、中を小さな泡が昇る。最後に裾から樹液が垂れて消える
      *   radius … 膜の大きさ  deepColor … 縁取りの濃い琥珀
      */
+    /**
+     * 波さらい（v1.8.0）。
+     *   ① 相手のまわりに強化の光（上向きの印）が浮かぶ
+     *   ② 左から波がせり上がって相手を横切る。波頭には白い泡
+     *   ③ 波に触れた印は、波といっしょに右へ流され、回りながら消える
+     *   ④ 波が抜けたあと、しずくが落ちる
+     * 色：波は技の属性（水）、印は buffColor、泡は foamColor
+     */
+    tideSweep: function (ctx, d, t, p) {
+      var i;
+      var W = d.width || 120, H = d.height || 90;
+      var left = p.x - W, right = p.x + W;
+      var buff = d.buffColor || "#5fd18c";
+      var foam = d.foamColor || "#e8fbff";
+
+      // 波の先頭の位置（0.18〜0.62 で左から右へ抜ける）
+      var w = span(t, 0.18, 0.44);
+      var front = left + (right - left) * easeIn(w) * 1.15;
+
+      // ① と ③ 強化の印（体のまわりに散らして置く。重ならないよう決まった位置）
+      var spots = [[-0.42, -0.05], [-0.15, -0.55], [0.2, -0.2], [0.45, -0.5], [0.05, 0.25]];
+      var marks = Math.min(d.marks || 5, spots.length);
+      for (i = 0; i < marks; i++) {
+        var appear = span(t, i * 0.025, 0.16);
+        if (appear <= 0) continue;
+        var mx = p.x + spots[i][0] * W * 0.75;
+        var my = p.y + spots[i][1] * H - 4 * Math.sin(t * 9 + i) - (1 - appear) * 10;
+        var alpha = appear, angle = 0;
+        if (w > 0 && front >= mx - 8) {
+          // さらわれた：波の先頭について右へ流れ、回って消える
+          var swept = Math.min(1, (front - mx + 8) / (W * 0.9));
+          mx += (front - mx) * 0.6 + swept * 30;
+          my += swept * 14;
+          angle = swept * 2.4 * (i % 2 === 0 ? 1 : -1);
+          alpha *= 1 - swept;
+        }
+        if (alpha <= 0.02) continue;
+        ctx.save();
+        ctx.translate(mx, my);
+        ctx.rotate(angle);
+        setAlpha(ctx, alpha);
+        ctx.strokeStyle = buff;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-6, 4); ctx.lineTo(0, -4); ctx.lineTo(6, 4);
+        ctx.moveTo(-6, 10); ctx.lineTo(0, 2); ctx.lineTo(6, 10);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ② 波（先頭が丸く巻いた水の帯）
+      if (w > 0 && t < 0.9) {
+        var a = (t < 0.7) ? 1 : Math.max(0, 1 - (t - 0.7) / 0.2);
+        var top = p.y - H * 0.6, bottom = p.y + H * 0.5;
+        var tail = Math.max(left - 20, front - W * 1.1);
+        ctx.save();
+        setAlpha(ctx, a * 0.55);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(tail, bottom);
+        // 背中：うしろほど低い
+        for (var k = 0; k <= 10; k++) {
+          var x = tail + (front - tail) * k / 10;
+          var rise = Math.pow(k / 10, 1.6);
+          ctx.lineTo(x, bottom - (bottom - top) * rise + Math.sin(k * 1.3 + t * 12) * 3);
+        }
+        // 先頭：波頭が前へ巻き、内側へ丸く返ってから、前の面を下りる
+        ctx.quadraticCurveTo(front + 34, top - 8, front + 30, top + 18);
+        ctx.quadraticCurveTo(front + 18, top + 26, front + 10, top + 16);
+        ctx.quadraticCurveTo(front + 2, (top + bottom) / 2, front + 16, bottom);
+        ctx.closePath();
+        ctx.fill();
+        // 波の中の濃い筋
+        setAlpha(ctx, a * 0.8);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(front - W * 0.5, bottom - (bottom - top) * 0.35);
+        ctx.quadraticCurveTo(front - W * 0.2, top + 10, front + 12, top + 4);
+        ctx.stroke();
+        // 波頭の泡
+        for (i = 0; i < 7; i++) {
+          var fx = front + 26 - i * 9 + Math.sin(t * 20 + i) * 2;
+          var fy = top + 2 + i * 2 + wobble(i + 30) * 5;
+          setAlpha(ctx, a * (0.9 - i * 0.1));
+          ctx.fillStyle = foam;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.5 + wobble(i + 40) * 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // ④ 抜けたあとのしずく
+      var after = span(t, 0.55, 0.45);
+      if (after > 0) {
+        for (i = 0; i < 6; i++) {
+          var s = span(after, i * 0.07, 0.6);
+          if (s <= 0 || s >= 1) continue;
+          var dx = p.x + (wobble(i + 60) - 0.5) * W * 1.2;
+          var dy = p.y - H * 0.5 + H * 1.1 * easeIn(s);
+          setAlpha(ctx, (1 - s) * 0.9);
+          ctx.fillStyle = (i % 2 === 0) ? p.color : foam;
+          sapDrop(ctx, dx, dy, 2.5 + wobble(i + 70) * 1.5);
+        }
+      }
+      ctx.lineCap = "butt";
+    },
+
     sapVeil: function (ctx, d, t, p) {
       var i;
       var R = d.radius || 40;

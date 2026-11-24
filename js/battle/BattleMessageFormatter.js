@@ -304,6 +304,9 @@
           return fill(event.skill.useMessage, { actor: this._actorName(event), skill: event.skillName });
         }
         return fill(t.useSkill, { actor: this._actorName(event), skill: event.skillName });
+      // 相手の強化を消した（波さらい。v1.8.0）
+      case "dispel":
+        return fill((event.names || []).length > 0 ? t.dispel : t.dispelNone, { target: this._targetName(event) });
       // 相手のPPを減らした（ミステリーダンス）
       case "ppDamage":
         return fill(event.amount > 0 ? t.ppDamage : t.ppDamageNone,

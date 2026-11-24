@@ -584,7 +584,7 @@
     var fallback = { type: "skill", skillId: this.getNormalAttackId(), targetIndex: target };
 
     // 決まった順番を持っている相手（主など）は、そのとおりに動く
-    if (enemy.actionPattern) return this._patternAction(enemy, target, fallback);
+    if (enemy.actionPattern) return this._patternAction(enemy, target, fallback, fieldAllies);
 
     // criticalAttack を持つ相手（ザンガルド）は、PP が尽きて技が1つも使えなくなったら、
     // 毎回「必ずクリティカルの通常攻撃」になる（2026-10-27 作者の指定。そこまで長引く戦いはまず無いので）
@@ -610,6 +610,8 @@
       if (this._modifierAlreadyOn(enemy, skills[i])) continue;
       // 全員満タンなら回復技は選ばない（手番を捨てることになる）
       if (this._healPointless(enemy, skills[i])) continue;
+      // 強化を消す技は、強化の掛かった相手がいなければ選ばない（v1.8.0）
+      if (this._dispelPointless(skills[i], fieldAllies)) continue;
       // 種族に enemyAi.healBelow があれば、そこまで減った仲間がいるときだけ回復技を使う
       if (this._healTooEarly(enemy, skills[i])) continue;
       usable.push(skills[i]);
@@ -635,7 +637,32 @@
     if (skill && skill.target === "ally") {
       return { type: "skill", skillId: chosen, targetIndex: this._mostWoundedIndex(enemy) };
     }
+    // 強化を消す技は、強化がいちばん多く掛かっている相手へ（v1.8.0）
+    if (skill && skill.dispel && skill.target === "enemy") {
+      return { type: "skill", skillId: chosen, targetIndex: this._mostBuffedIndex(fieldAllies, target) };
+    }
     return { type: "skill", skillId: chosen, targetIndex: target };
+  };
+
+  /** 強化を消す技（dispel）だが、相手の誰にも強化が掛かっていないか（v1.8.0） */
+  BattleSystem.prototype._dispelPointless = function (skillId, foes) {
+    var skill = this.data.getSkill(skillId);
+    if (!skill || !skill.dispel || skill.power) return false;
+    return this._mostBuffedIndex(foes, -1) < 0;
+  };
+
+  /**
+   * 強化がいちばん多く掛かっている相手の番号（v1.8.0 波さらい）。同じ数なら前に並んでいるほう。
+   * 誰にも掛かっていなければ fallback
+   */
+  BattleSystem.prototype._mostBuffedIndex = function (field, fallback) {
+    var best = fallback, most = 0;
+    for (var i = 0; i < (field || []).length; i++) {
+      if (!field[i] || field[i].isFainted()) continue;
+      var n = BattleSystem.buffCount(field[i]);
+      if (n > most) { most = n; best = i; }
+    }
+    return best;
   };
 
   /** 自分の側で、最大HPからいちばん減っている仲間の番号 */
@@ -805,7 +832,7 @@
    *   { choice: [ { weight: 0.5, skill: "normalAttack", critical: true },
    *               { weight: 0.5, skill: "gale" } ] }   … 重みで1つ選ぶ（その手番ごとに引き直す）
    */
-  BattleSystem.prototype._patternAction = function (enemy, target, fallback) {
+  BattleSystem.prototype._patternAction = function (enemy, target, fallback, foes) {
     var entry = enemy.nextPatternAction();
     if (!entry) return fallback;
 
@@ -818,6 +845,9 @@
     if (!this._canUseSkill(enemy, skillId)) return fallback;
 
     var action = { type: "skill", skillId: skillId, targetIndex: target };
+    // 強化を消す技は、強化がいちばん多く掛かっている相手へ（v1.8.0。手順で決めた主も同じ）
+    var picked = this.data.getSkill(skillId);
+    if (picked && picked.dispel && picked.target === "enemy") action.targetIndex = this._mostBuffedIndex(foes || [], target);
     if (forceCritical) action.forceCritical = true;
     return action;
   };
@@ -1069,6 +1099,14 @@
     for (var i = 0; i < skills.length; i++) {
       var s = skills[i];
       if (BattleSystem.dealsDamage(s) || s.heal || s.cureStatus) continue;
+
+      // 強化を消す技（波さらい。v1.8.0）は弱体の仲間。強化がいちばん多い相手へ。誰にも掛かっていなければ使わない
+      if (s.dispel) {
+        var at = this._mostBuffedIndex(foes, -1);
+        if (at >= 0) debuffs.push({ skill: s, target: (s.target === "enemy") ? foes[at] : null,
+                                    key: [Math.min(1, BattleSystem.buffCount(foes[at]) / 2), rangeOf(s), 1] });
+        continue;
+      }
 
       if (s.modifier) {
         var amount = modifierAmountOf(s.modifier);
@@ -1504,7 +1542,7 @@
 
     // 向かい側を狙う技は、立ち塞がっている者がいればそちらへ向く（自分・味方にかける技は変えない）
     if (!skill || (skill.target !== "self" && skill.target !== "ally")) {
-      target = this._coverFor(target, step.side);
+      target = this._coverFor(target, step.side, skill);
     }
 
     // 「必ずクリティカル」（主の行動手順 _patternAction・出る場所の表の criticalAttack の forceCritical）は、この1回だけ効かせる
@@ -1632,6 +1670,8 @@
    * skill を渡さなければ、今までどおり何にでも掛ける
    */
   BattleSystem.prototype._accuracyMultiplier = function (actor, skill) {
+    // 必中の技（sureHit。波さらい。v1.8.0）は、盲目も命中の弱体も受けない（作者「どの技の影響も受けない」）
+    if (skill && skill.sureHit) return 1;
     var defs = actor && actor.getStatusDefs ? actor.getStatusDefs() : [];
     var total = 1;
 
@@ -1839,6 +1879,32 @@
       ppTarget: target, ppValue: target.currentPp,
       // 減ったときは弱体と同じ音（作者の指定）。減らなかったとき（PPが0）は鳴らさない
       se: amount > 0 ? "debuff" : null
+    });
+  };
+
+  /**
+   * 相手の強化をすべて消す（技の dispel。v1.8.0 波さらい。作者の指定 2026-11-24）。
+   * 「強化」は、掛かったときに強化の色で出るもの（isRaising。樹液の膜のような毎ターンの回復も入る。作者の指定）と、
+   * ちからためでためた力（_charged。作者「一応強化だし」2026-11-24）。
+   * 弱体はそのまま残る。特性・装備・加護の効果、芽吹きの守りは消さない。
+   * 弱体への耐性は掛からない（弱体を掛けるのではなく、強化を外すため）。
+   *   dispel.chance … 0〜1。書かなければ必ず消す。外れたときは何も言わない（ジャッジメントの「50% で消す」の予定）
+   * 威力を持たない技で消すものが無ければ「消せる強化がなかった」と出す。威力を持つ技では何も言わない
+   */
+  BattleSystem.prototype._applyDispel = function (target, skill, side, events) {
+    if (!target || !Array.isArray(target.modifiers)) return;
+    var spec = skill.dispel || {};
+    var chance = (typeof spec.chance === "number") ? spec.chance : 1;
+    if (chance < 1 && this.random.next() >= chance) return;
+
+    var removed = BattleSystem.removeBuffs(target);
+    if (removed.length === 0 && skill.power) return;
+    events.push({
+      type: "dispel", targetSide: opposite(side),
+      targetName: target.getName(), target: target, skillId: skill.id,
+      names: removed.map(function (mod) { return mod.name; }),
+      // 消えたときは弱体と同じ音。消すものが無かったときは鳴らさない
+      se: removed.length > 0 ? "debuff" : null
     });
   };
 
@@ -2072,7 +2138,7 @@
       if (!group[i].isFainted() && !group[i]._removed) alive.push(group[i]);
     }
     if (alive.length === 0) return null;
-    return this._coverFor(alive[this.random.nextInt(0, alive.length - 1)], side);
+    return this._coverFor(alive[this.random.nextInt(0, alive.length - 1)], side, skill);
   };
 
   /**
@@ -2087,7 +2153,7 @@
     // PPが足りずに通常攻撃へ切り替わった場合は、範囲技ではないので1体だけ。
     // 立ち塞がっている者がいれば、ほかの攻撃と同じくそちらへ向く（v1.3.1 で直した。前は素通りしていた）
     if (skill.target !== "allEnemies") {
-      if (targets[0]) this._resolveHit(actor, this._coverFor(targets[0], side), skill, side, events);
+      if (targets[0]) this._resolveHit(actor, this._coverFor(targets[0], side, skill), skill, side, events);
       return;
     }
 
@@ -2095,7 +2161,7 @@
     var segments = [];
     for (var i = 0; i < targets.length; i++) {
       // 立ち塞がっている者がいれば、1体ずつそちらへ向く（全員ぶんを1体で受ける）
-      var target = this._coverFor(targets[i], side);
+      var target = this._coverFor(targets[i], side, skill);
       // この技で先に倒れた相手は飛ばす
       if (target.isFainted() || target._removed) continue;
       var start = events.length;
@@ -2177,7 +2243,7 @@
       var foes = this._candidatesFor(side, skill);
       for (var f = 0; f < foes.length; f++) {
         if (foes[f].isFainted()) continue;
-        this._resolveHit(actor, this._coverFor(foes[f], side), skill, side, events);
+        this._resolveHit(actor, this._coverFor(foes[f], side, skill), skill, side, events);
         return;
       }
       return;
@@ -2326,6 +2392,13 @@
       if (!skill.power) return;
     }
 
+    // 相手の強化をすべて消す技（波さらい。v1.8.0）。威力を持たない技はここで終わり。
+    // 威力も持つ技（ジャッジメントの予定）は、ダメージを見せたあとで消す（下）
+    if (skill.dispel && !skill.power) {
+      this._applyDispel(target, skill, side, events);
+      return;
+    }
+
     // 状態異常を治す技（クレンズ）。威力を持たない技はここで終わり
     if (skill.cureStatus) {
       this._applyCure(target, skill, side, events);
@@ -2382,6 +2455,7 @@
     // 画面側は被弾の動きをせず「ダメージを与えられなかった」と出す（BattleScene）。
     // 当たってはいるので、追加の状態異常の判定はする
     if (result.damage <= 0) {
+      if (skill.dispel) this._applyDispel(target, skill, side, events);
       if (skill.modifier) this._applyModifier(actor, target, skill, side, events);
       if (lateStatus) this._applyStatus(actor, target, skill, side, events);
       return;
@@ -2413,7 +2487,8 @@
     // ダメージのあとの追加の状態異常（どくばりの毒など）。入らなければ MISS。
     // 目を覚ます判定より後に置く（眠らせる技で、入れた眠りがその場で覚めないように）。
     // 倒した相手には入れない（上で return している）。
-    // 威力を持つ弱体の技（ロックスパイク）も、同じくここで掛ける
+    // 威力を持つ弱体の技（ロックスパイク）も、同じくここで掛ける。強化を消すのは掛ける前（v1.8.0）
+    if (skill.dispel) this._applyDispel(target, skill, side, events);
     if (skill.modifier) this._applyModifier(actor, target, skill, side, events);
     if (lateStatus) this._applyStatus(actor, target, skill, side, events);
 
@@ -2754,11 +2829,14 @@
    * 向かい側（守る側）に _covering の者がいて、まだ立っていれば、その者が受ける。
    * 範囲全体の技も1体ずつこれを通すので、「全員ぶん」を1体で受けることになる。
    * 立ち塞がっていた者が倒れたら、残りはふつうに当たる
+   * 必中の技（sureHit。波さらい）は立ち塞がるを無視して、本来の的に当たる（v1.8.0 作者の指定「立ち塞がるは無視で」）
    * @param {object} target 本来の的
    * @param {string} attackerSide 攻撃する側
+   * @param {object} [skill] 出した技
    */
-  BattleSystem.prototype._coverFor = function (target, attackerSide) {
+  BattleSystem.prototype._coverFor = function (target, attackerSide, skill) {
     if (!target) return target;
+    if (skill && skill.sureHit) return target;
     var group = (attackerSide === "ally") ? this.getFieldEnemies() : this.getFieldAllies();
     for (var i = 0; i < group.length; i++) {
       var m = group[i];
@@ -3180,6 +3258,8 @@
     // 味方にかける技（回復など）を、素早い仲間がよけてしまわないように
     if (skill.target === "ally") return false;
     if (this.data.getSkillRule(skill, "evadable") === false) return false;
+    // 必中の技（sureHit。v1.8.0）はよけられない
+    if (skill.sureHit) return false;
     if (!target.getEvasion) return false;
 
     var evasion = target.getEvasion();
@@ -3559,6 +3639,7 @@
     if (skill.heal || skill.cureStatus || skill.revive) return "heal";
     if (skill.status) return "status";
     if (skill.ppDamage) return "debuff";
+    if (skill.dispel) return "debuff";
     if (skill.modifier && !isRaising(skill.modifier) &&
         skill.target !== "self" && skill.target !== "ally" && skill.target !== "allAllies") return "debuff";
     return "buff";
@@ -3610,6 +3691,31 @@
     return !!(skill && skill.modifier) && isRaising(skill.modifier);
   };
 
+  /** 掛かっている強化の数（技で掛かった強化と、ちからため。波さらいで消える数。v1.8.0） */
+  BattleSystem.buffCount = function (monster) {
+    var mods = (monster && monster.modifiers) || [];
+    var n = (monster && monster._charged) ? 1 : 0;
+    for (var i = 0; i < mods.length; i++) if (isRaising(mods[i])) n++;
+    return n;
+  };
+
+  /**
+   * 掛かっている強化をすべて外して、外したものを返す（弱体は残す。v1.8.0 波さらい）。
+   * ちからためでためた力も外す（返す1件は { name: "ちからため" }。印は無いので、画面は文と札だけ出す）
+   */
+  BattleSystem.removeBuffs = function (monster) {
+    var kept = [], removed = [];
+    var mods = (monster && monster.modifiers) || [];
+    for (var i = 0; i < mods.length; i++) (isRaising(mods[i]) ? removed : kept).push(mods[i]);
+    if (monster) monster.modifiers = kept;
+    if (monster && monster._charged) {
+      monster._charged = null;
+      monster._chargeFresh = false;
+      removed.push({ id: "charge", name: "ちからため" });
+    }
+    return removed;
+  };
+
   /**
    * 体技の計算の分け方（v1.4.1・2026-11-12 作者の指定）。
    *   "rate"  … 1体の体技：通常攻撃の基礎 × 威力（倍率）。斬撃からクリティカルを抜いたもの
@@ -3626,7 +3732,7 @@
   BattleSystem.dealsDamage = function (skill) {
     if (!skill) return false;
     if (skill.power) return true;
-    return !(skill.heal || skill.modifier || skill.status || skill.cureStatus || skill.ppDamage || skill.wardStatus || skill.charge || skill.revive);
+    return !(skill.heal || skill.modifier || skill.status || skill.cureStatus || skill.ppDamage || skill.wardStatus || skill.charge || skill.revive || skill.dispel);
   };
 
   NS.BattleSystem = BattleSystem;

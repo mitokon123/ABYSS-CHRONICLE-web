@@ -651,6 +651,11 @@
       sapVeil: {
         shape: "sapVeil", duration: 1300, glow: 12, color: "#f0b040", deepColor: "#a86414", radius: 40, drops: 4
       },
+      // 波さらい（v1.8.0）。相手のまわりに強化の光（上向きの印）が浮かび、横から来た波がそれをさらって流れ去る。
+      // 色は水の属性の色。印は強化の緑（statColors.hp）
+      tideSweep: {
+        shape: "tideSweep", duration: 1150, glow: 12, buffColor: "#5fd18c", foamColor: "#e8fbff", width: 110, height: 90, marks: 5
+      },
       // クレンズ。澄んだ雫が落ちて輪が広がり、きらめく
       cleanseDrop: {
         shape: "cleanse", duration: 860, glow: 12, color: "#9fe3ff", count: 7

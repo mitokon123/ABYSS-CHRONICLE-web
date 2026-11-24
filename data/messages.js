@@ -100,6 +100,8 @@
       // 相手のPPを減らす技（ミステリーダンス。v1.0.0）
       ppDamage:     "{target} の PPが {amount} 減った!",      // target, amount
       ppDamageNone: "しかし {target} の PPは もう残っていない", // target
+      dispel:       "{target} の 強化が すべて 消えた!",        // target（波さらい。v1.8.0）
+      dispelNone:   "しかし {target} には 消せる強化が なかった", // target
 
       // 戦闘中に働く特性（data/abilities.js の regen / counterStatus / drain / firstStrike / undying）。
       //   abilityTriggered … 特性が働いた合図（先手・脱皮など）。
@@ -196,6 +198,7 @@
       // 画面上部の発動の札（強化・弱体・特性・加護が働いたとき）
       popupStatUp:   "{stat}上昇",                              // stat
       popupStatDown: "{stat}低下",                              // stat
+      popupDispel:   "強化解除",                                // 波さらいで強化が消えた（v1.8.0）
       popupStats:    { hp: "HP", attack: "攻撃力", defense: "防御力", speed: "素早さ", pp: "PP",
                        accuracy: "命中", other: "能力" },
       popupPartyAll: "仲間全員",

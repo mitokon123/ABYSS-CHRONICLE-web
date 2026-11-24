@@ -945,6 +945,13 @@
       case "modifierEnd":
         this._hideModifier(event);
         break;
+      // 強化が消えた（波さらい。v1.8.0）。消えた強化の印をまとめて外す
+      case "dispel":
+        for (var dn = 0; dn < (event.names || []).length; dn++) {
+          this._hideModifier({ target: event.target, skillName: event.names[dn] });
+        }
+        if (event.se) this.game.audio.playSe(event.se);
+        break;
       // レベルアップで覚えた技を図鑑へ。
       // BattleSystem は Game を知らないので、記録は画面側で行う
       case "skillLearned":
@@ -1069,6 +1076,9 @@
         }
         return;
       }
+    } else if (event.type === "dispel") {
+      // 強化が消えた（波さらい。v1.8.0）。消すものが無かったときは出さない
+      if ((event.names || []).length > 0) { text = t.popupDispel; kind = "debuff"; }
     } else if (event.type === "ability" || event.type === "undying" || event.type === "partyFirstStrike" ||
                event.type === "tailwind" || event.type === "wardGiven" || event.type === "abilityPopup" ||
                ((event.type === "regen" || event.type === "drain" || event.type === "ppRegen") && event.abilityName)) {
@@ -1779,10 +1789,10 @@
     // wardSkill … 味方全体に守りを付ける技（芽吹きの加護）。付いた1体ごとに演出を出す
     // modifierMiss … 弱体が耐性で入らなかった。charge … 力をためた（自分）
     // cure … 状態異常を治した（ディンド・リカバーなど。治した仲間ごとに演出を出す）
-    // ppDamage … 相手のPPを減らした（ミステリーダンス）
+    // ppDamage … 相手のPPを減らした（ミステリーダンス）。dispel … 強化を消した（波さらい。v1.8.0）
     return type === "damage" || type === "miss"
         || type === "immune" || type === "modifier" || type === "wardSkill"
-        || type === "modifierMiss" || type === "charge" || type === "cure" || type === "ppDamage";
+        || type === "modifierMiss" || type === "charge" || type === "cure" || type === "ppDamage" || type === "dispel";
   }
 
   /** 状態異常だけを付けるブレスか（種類が breath で、ダメージを持たない。どくのいき・眠りの胞子） */

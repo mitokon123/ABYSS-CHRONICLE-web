@@ -120,6 +120,25 @@
     // 戻ってきたときに中身が変わっている場合があるので読み直す
     this.slots = this.saveManager.peekAll();
     this.phase = "list";
+    // 「読み込む」を押した瞬間に、ファイルを選ぶ窓を開く（v1.7.1。iOS はそうしないと開かない。Input.setTapHandler）
+    var self = this;
+    this._importOpenedByTap = false;
+    if (this.game.input && this.game.input.setTapHandler) {
+      this.game.input.setTapHandler(function (x, y) { self._onTapNow(x, y); });
+    }
+  };
+
+  SaveSlotScene.prototype.exit = function () {
+    if (this.game.input && this.game.input.setTapHandler) this.game.input.setTapHandler(null);
+  };
+
+  /** 押して離したその瞬間（ブラウザのイベントの中）。「読み込む」なら、ここで窓を開く（v1.7.1） */
+  SaveSlotScene.prototype._onTapNow = function (x, y) {
+    if (this.phase !== "list" || this.mode !== "continue" || this._returnTimer > 0) return;
+    if (this.game.scenes && this.game.scenes.isChanging && this.game.scenes.isChanging()) return;
+    if (!NS.Panel.containsPoint(this.importButton.rect, { x: x, y: y })) return;
+    this._importOpenedByTap = true;
+    this._openImportFile();
   };
 
   /** 選べる最初のスロット（続きからで全部空なら -1） */
@@ -185,11 +204,15 @@
       return;
     }
 
-    // ファイルから読み込む。ファイルを選ぶ窓は、押した操作の続きでないと開けないので、ここで開く
+    // ファイルから読み込む。ファイルを選ぶ窓は、押した操作の続きでないと開けない。
+    // 指・マウスで押したときは、押した瞬間にもう開いている（_onTapNow。v1.7.1）ので、ここでは開き直さない。
+    // キー（importSave）のときだけここで開く（パソコンのブラウザは、キーを押した少しあとでも開ける）
+    var openedByTap = this._importOpenedByTap;
+    this._importOpenedByTap = false;
     if (this.phase === "list" && this.mode === "continue") {
       var importClicked = this.importButton.handleInput(input);
       if (importClicked || input.isPressed("importSave")) {
-        this._openImportFile();
+        if (!(importClicked && openedByTap)) this._openImportFile();
         return;
       }
     }
@@ -507,8 +530,13 @@
     try {
       var input = document.createElement("input");
       input.type = "file";
-      input.accept = ".json,application/json";
-      input.style.display = "none";
+      // iOS では拡張子で絞ると、書き出したファイルが選べないことがあるので、文字のファイルも受ける（中身は parseImport が調べる。v1.7.1）
+      input.accept = ".json,application/json,text/plain,.txt";
+      // display: none だと iOS で窓が開かないことがあるので、画面の外に透明で置く（v1.7.1）
+      input.style.position = "fixed";
+      input.style.left = "-1000px";
+      input.style.top = "0";
+      input.style.opacity = "0";
       input.addEventListener("change", function () {
         var file = input.files && input.files[0];
         if (input.parentNode) input.parentNode.removeChild(input);
