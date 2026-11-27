@@ -12,6 +12,9 @@
  * shape    : どんな形で描くか（描き方は js/ui/SkillEffect.js が持つ）
  * duration : 出てから消えるまでの時間（ms）
  * glow     : にじみの強さ。暗い背景で色が沈まないようにする。0で無し
+ * hitAt    : 当たる瞬間（duration の何割のところか。0〜1）。書くと、戦闘では演出を先に始めて、
+ *            ダメージの数字・HPバー・揺れ・音・文を、この瞬間まで待ってから出す（v1.8.0 作者の指定）。
+ *            書かない演出は今までどおり、演出と数字が同時に出る。待ちには戦闘速度が掛かり、決定キーで飛ばせる
  * hitSe    : この型で当たったときの音（data/audio.js の se のid）。
  *            書かなければ hit（打撃音）。斬る型だけ slash（斬撃音）にしてある。
  *            通常攻撃は種族の attackEffect（data/monsters.js）で型が決まるので、
@@ -554,14 +557,21 @@
         waves: 4, radius: 300, flatten: 0.3, lineWidth: 6, spikes: 28
       },
 
-      // 〇〇ベール。光の幕。色は守る属性（data/elements.js と同じ色）
-      veilFire:    { shape: "veil", duration: 900, glow: 14, color: "#e8542a", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilWater:   { shape: "veil", duration: 900, glow: 14, color: "#4fb0d1", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilWind:    { shape: "veil", duration: 900, glow: 14, color: "#7fd9a8", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilEarth:   { shape: "veil", duration: 900, glow: 14, color: "#c8a35e", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilThunder: { shape: "veil", duration: 900, glow: 14, color: "#ffd75e", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilLight:   { shape: "veil", duration: 900, glow: 14, color: "#f2f0d8", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
-      veilDark:    { shape: "veil", duration: 900, glow: 14, color: "#8b6fd6", width: 64, height: 92, strips: 7, count: 12, minSize: 3, maxSize: 5 },
+      // エレメントバリア（v1.8.0。〇〇ベール7つの代わり）。光の幕が降りて包む。幕の帯と粒が7属性の色（data/elements.js と同じ色）
+      elementBarrier: { shape: "elementBarrier", duration: 1000, glow: 16, color: "#e8f4ff",
+        colors: ["#e8542a", "#4fb0d1", "#7fd9a8", "#c8a35e", "#ffd75e", "#f2f0d8", "#8b6fd6"],
+        width: 70, height: 96, strips: 7, count: 14, minSize: 3, maxSize: 5 },
+      // リフレクト（v1.8.0）。六角の鏡の板が体のまわりに集まって球になり、光が板の上を走る
+      //   radius … 球の大きさ   panels … 板の数   sweep … 光の筋が走る速さ
+      reflectWall: { shape: "reflectWall", duration: 1000, glow: 16, color: "#9fe6ff", accentColor: "#ffffff",
+        radius: 52, panels: 10, panelSize: 15 },
+      // リバーサル（v1.8.0）。足元から赤い気が立ち、体の前で刃のような弧が2本交差して構える
+      reversal: { shape: "reversal", duration: 900, glow: 16, color: "#ff8a4a", accentColor: "#ffe0b0",
+        radius: 48, spikes: 10 },
+      // はね返した瞬間（反射の技。v1.8.0）。返した側の前で板がはじけ、矢じりが撃った側へ飛ぶ。
+      // 色は返したもので変わる（共鳴は水色・攻撃は橙。BattleScene が渡す）
+      reflectBounce: { shape: "reflectBounce", duration: 520, glow: 18, color: "#9fe6ff", accentColor: "#ffffff",
+        radius: 40, arrows: 5 },
 
       // 幻惑の息。目をくらます暗い息（盲目の色。data/statuses.js の blind.color）。粒は暗い火の粉
       blindMist: {
@@ -770,6 +780,435 @@
         length: 190, thickness: 14, tilt: 0.17,
         crackWidth: 120, groundY: 48, rise: 96,
         rocks: 8, embers: 12, minSize: 4, maxSize: 9
+      },
+
+      /**
+       * --- v1.8.0 の技（2026-11-25 から少しずつ描く。作者が見て決める） ---
+       * ブレスの2段目（灼熱の息・大渦・深淵の息）は、1段目の息（miasma の項目）に、相手ひとりずつの足元の演出を重ねる
+       */
+      // 灼熱の息。火の息より濃く広い炎の息＋足元から立ち昇る炎の舌＋熱の揺らぎ
+      scorchBreath: {
+        shape: "scorchBreath", duration: 1100, glow: 20,
+        accentColor: "#ffd75e", particle: "spark",
+        spread: 260, height: 72, lift: 40, count: 28, minSize: 18, maxSize: 36, bubbles: 26,
+        flames: 4, flameHeight: 100, groundY: 44
+      },
+      // 大渦。泡の息＋足元で回りながら締まる渦と、上へ細くなる水の輪（漏斗）・しぶき
+      whirlpool: {
+        shape: "whirlpool", duration: 1250, glow: 14,
+        accentColor: "#bfe9ff", particleColor: "#e6f7ff", particle: "bubble", particleScale: 1.6,
+        spread: 250, height: 60, lift: 12, count: 14, minSize: 12, maxSize: 24, bubbles: 14,
+        foamColor: "#e8fbff", deepColor: "#16305a",
+        radius: 64, arms: 3, squash: 0.4, groundY: 30, levels: 3, drops: 10
+      },
+      // 深淵の息。奈落の息より濃い闇＋足元の影だまりから伸びて絡みつく闇の手
+      deepBreath: {
+        shape: "deepBreath", duration: 1250, glow: 16,
+        accentColor: "#2a1650", particleColor: "#c9b8ff", particle: "spark",
+        spread: 260, height: 80, lift: 4, count: 28, minSize: 20, maxSize: 40, bubbles: 18,
+        darkColor: "#1a0f33", tendrils: 4, reach: 92, groundY: 44
+      },
+
+      // ブレスの最上位（2026-11-25）。並び全体を包む大きな演出
+      // 焦熱地獄。閃光 → 濃い炎の息 → 炎の海 → 火の粉 → 足元に燻る輪（焦熱）
+      scorchingHell: {
+        shape: "scorchingHell", duration: 1500, glow: 22, hitAt: 0.15,
+        accentColor: "#ffd75e", deepColor: "#8a1a08", particle: "spark",
+        spread: 300, height: 80, lift: 46, count: 32, minSize: 20, maxSize: 40, bubbles: 30,
+        flames: 22, flameHeight: 150, embers: 30, groundY: 44
+      },
+      // 怒濤海嘯。並びより背の高い大波（2枚）が左から右へ抜け、しぶきが上がり、水が降る
+      tidalBreath: {
+        shape: "tidalBreath", duration: 1500, glow: 14, hitAt: 0.25,
+        foamColor: "#e8fbff", deepColor: "#1d4f8a",
+        spread: 300, waveHeight: 200, waveLength: 380, groundY: 56
+      },
+      // 冥府魔道。闇の息 → 並びの上に冥府の門 → 闇の流れが降り注ぐ → 亡者の炎が回って昇る → 門が閉じる
+      netherBreath: {
+        shape: "netherBreath", duration: 1600, glow: 16, hitAt: 0.45,
+        accentColor: "#2a1650", particleColor: "#c9b8ff", particle: "spark",
+        spread: 260, height: 70, lift: 4, count: 22, minSize: 18, maxSize: 34, bubbles: 14,
+        darkColor: "#12081f", rimColor: "#c9b8ff", gateHeight: 130, gateWidth: 280, wisps: 5
+      },
+      // 千刃旋風。風の息 → 並び全体を巻く旋風の輪 → その中を回る無数の刃 → 相手ごとの切り傷と赤いしずく（裂傷）
+      //   stormHeight … 旋風の高さ   blades / bladeSize … 刃の数と大きさ   cuts / cutColor … 切り傷の数と色
+      bladeStorm: {
+        shape: "bladeStorm", duration: 1400, glow: 14, hitAt: 0.3,
+        accentColor: "#eef6ff", particle: "spark",
+        spread: 280, height: 70, lift: 20, count: 20, minSize: 16, maxSize: 30, bubbles: 12,
+        stormHeight: 110, rings: 5, blades: 44, bladeSize: 18, bladeColor: "#eef6ff",
+        cuts: 4, cutColor: "#ff6b6b"
+      },
+      // 大地崩落。砂の息 → 足元に地割れが走る → 地面が割れて板が傾きながら沈み、穴が開く → 岩が降って土煙が立つ
+      //   groundY … 足元の高さ   pitColor … 穴の奥の色   rocks … 飛ぶ岩のかけらの数
+      earthCollapse: {
+        shape: "earthCollapse", duration: 1500, glow: 10, hitAt: 0.36,
+        accentColor: "#d9b77a", particle: "spark",
+        spread: 300, height: 60, lift: 10, count: 22, minSize: 18, maxSize: 34, bubbles: 14,
+        groundY: 44, pitColor: "#1a120a", rocks: 26
+      },
+      // 万雷轟天。雷の息 → 並びの上に雷雲 → 細い雷が降りそそぐ（万雷）→ 相手ごとに太い雷と閃光 → 体を這う電気（麻痺）
+      //   cloudHeight / cloudMinY … 雷雲の高さ（画面の上で止める）   bolts … 細い雷の数
+      thunderHeaven: {
+        shape: "thunderHeaven", duration: 1600, glow: 22, hitAt: 0.42,
+        accentColor: "#fff6c2", particle: "spark",
+        spread: 300, height: 70, lift: 20, count: 18, minSize: 16, maxSize: 30, bubbles: 16,
+        cloudColor: "#3b4060", cloudHeight: 120, cloudMinY: 18, bolts: 18, groundY: 44
+      },
+      // 光芒万丈。光の息 → 並びの上に光の玉が昇り、回りながら光の筋（光芒）を四方へ伸ばす
+      //   → 相手ごとに光の柱が降りる → 白い閃光 → 相手のまわりで星がまたたく（盲目）
+      //   sunHeight / sunMinY … 光の玉の高さ（画面の上で止める）   rays … 光の筋の数   stars … またたく星の数
+      radiantBreath: {
+        shape: "radiantBreath", duration: 1600, glow: 22, hitAt: 0.4,
+        accentColor: "#ffffff", particle: "spark",
+        spread: 300, height: 70, lift: 24, count: 20, minSize: 16, maxSize: 30, bubbles: 18,
+        sunHeight: 110, sunMinY: 34, sunRadius: 30, rays: 16, rayLength: 420, stars: 6
+      },
+
+      // 強化の技（2026-11-25）。色は書かず、上がる能力の色（statColors）になる
+      // ウォークライ。とげとげの声の輪が広がり、体から炎のような闘気が立ちのぼり、矢じりが昇る
+      //   shouts … 声の輪の数   radius … 輪の広がり   flames … 闘気の炎の数
+      warCry: {
+        shape: "warCry", duration: 950, glow: 14, hitAt: 0.15,
+        shouts: 3, radius: 78, spikes: 14, flames: 7, flameHeight: 70, count: 6
+      },
+      // プロテクション。足元から六角の板が下から上へ組み上がって体を包み、光がなでてから体に吸い込まれる
+      //   radius … 包む大きさ   rings / cells … 六角の段の数と1段の数
+      protection: {
+        shape: "protection", duration: 1000, glow: 12, hitAt: 0.3,
+        radius: 54, rings: 4, cells: 8, cellSize: 13
+      },
+      // クイックル。足元に小さな翼が生えて羽ばたき、緑の風が体を巻いて昇り、羽根が舞う
+      //   wing … 翼の大きさ   swirls … 昇る風の数   feathers … 舞う羽根の数
+      quickle: {
+        shape: "quickle", duration: 950, glow: 10,
+        wing: 40, swirls: 3, radius: 40, rise: 80, feathers: 8
+      },
+      // オーバードライブ。足元が光って、太い闘気の柱が立ち、まわりで稲妻がはじけ、炎の闘気が体を包む（ウォークライの一段上）
+      //   pillar … 柱の太さ   flames … 闘気の炎の数   arcs … はじける稲妻の数
+      overdrive: {
+        shape: "overdrive", duration: 1150, glow: 20, hitAt: 0.25, accentColor: "#ffd75e",
+        pillar: 52, pillarHeight: 150, flames: 10, flameHeight: 96, arcs: 5, count: 14
+      },
+      // アイギス。体の前に大きな丸い盾が現れて輝き、光がなでたあと、六角の殻になって体を包む（プロテクションの一段上）
+      //   shield … 盾の大きさ   radius … 殻の大きさ
+      aegis: {
+        shape: "aegis", duration: 1300, glow: 18, hitAt: 0.45, accentColor: "#fff3c4",
+        shield: 46, radius: 60, rings: 4, cells: 9, cellSize: 14
+      },
+      // アクセル。胸の前の時計の針がどんどん速く回り、緑の風が速く昇り、最後に速い筋が四方へはじける（クイックルの一段上）
+      //   dial … 時計の大きさ   swirls … 昇る風の数   burst … はじける筋の数
+      accel: {
+        shape: "accel", duration: 1100, glow: 14, hitAt: 0.55,
+        dial: 30, swirls: 5, radius: 42, rise: 96, burst: 12
+      },
+
+      // 弱体の技（2026-11-25）。色は書かず、下がる能力の色（statColors）になる
+      // クラック。体の前に守りの板が現れ、当たったところからひびが走り、割れて落ちる
+      //   plate … 板の大きさ   cracks … ひびの本数   shards … かけらの数
+      crack: {
+        shape: "crack", duration: 1000, glow: 12, hitAt: 0.45,
+        plate: 40, cracks: 6, shards: 10
+      },
+      // スロウ。頭の上の時計の針がだんだん遅くなって止まり、足元に重い沼が広がって、下向きの矢じりが沈む
+      //   dial … 時計の大きさ   count … 矢じりの数
+      slow: {
+        shape: "slow", duration: 1100, glow: 10, hitAt: 0.2,
+        dial: 24, count: 6, radius: 46
+      },
+      // コラプス。六角の殻が体を包んだあと、ひびが入り、板がばらばらに崩れ落ちる（全体）
+      collapse: {
+        shape: "collapse", duration: 1200, glow: 12, hitAt: 0.4,
+        radius: 54, rings: 4, cells: 8, cellSize: 13
+      },
+      // グラビティ。上から重い輪が何枚も降りて体を押しつぶし、足元の地面がへこみ、粒が下へ引かれる（全体）
+      //   rings … 降りる輪の数   radius … 輪の大きさ   count … 引かれる粒の数
+      gravity: {
+        shape: "gravity", duration: 1150, glow: 12, hitAt: 0.3, darkColor: "#0c1020",
+        rings: 5, radius: 50, count: 14
+      },
+      // シャター。クラックの一段上。響きの輪が外から板へ集まり、ひびが走って、板がはじけ飛ぶ（防御の青）
+      //   plate … 板の大きさ   shards … はじけるかけらの数
+      shatterArmor: {
+        shape: "shatterArmor", duration: 1150, glow: 16, hitAt: 0.5,
+        plate: 46, cracks: 8, shards: 18
+      },
+      // バインド。スロウの一段上。足元に魔法の輪が描かれ、光の鎖が3本巻きついて締まり、前に錠の印が光る（素早さの緑）
+      //   radius … 鎖の輪の大きさ   chains … 鎖の本数   links … 1本の鎖の輪の数
+      bind: {
+        shape: "bind", duration: 1200, glow: 12, hitAt: 0.4,
+        radius: 48, chains: 3, links: 26
+      },
+
+      // 回復と蘇生（2026-11-25）
+      // キュアリス。足元に回る花の魔法陣 → 光の柱 → 体のまわりで光の花びらが開いて昇る → 頭の上に大きな十字が輝いてほどける
+      //   radius … 魔法陣の大きさ   petals … 花びらの数   column … 光の柱を出すか   bigCross … 頭の上の十字を出すか
+      curaris: {
+        shape: "fullHeal", duration: 1250, glow: 18, hitAt: 0.3, color: "#5fd18c", accentColor: "#e9ffe0",
+        radius: 44, petals: 8, crosses: 10, rise: 96, column: true, bigCross: true
+      },
+      // キュアリスオール。キュアリスを全員へ。柱と大きな十字は出さず、魔法陣と花びらと十字の光
+      curarisAll: {
+        shape: "fullHeal", duration: 1150, glow: 16, hitAt: 0.3, color: "#5fd18c", accentColor: "#e9ffe0",
+        radius: 40, petals: 8, crosses: 8, rise: 86
+      },
+      // リザレクション。上から金の羽根が舞い降り、触れたところから金の柱が立ち、背に光の翼が開き、頭の上に光の輪が浮かぶ
+      //   wing … 翼の大きさ   feathers … 1枚の翼の羽根の数
+      resurrection: {
+        shape: "resurrection", duration: 1600, glow: 22, hitAt: 0.28, color: "#ffe08a", accentColor: "#fffbe8",
+        radius: 44, wing: 90, feathers: 7, crosses: 12, rise: 110
+      },
+
+      // 支える技（2026-11-26）
+      // リフレッシュ。体のまわりに弱体の印（下向きの矢じり・暗い色）が浮かび、澄んだ光の渦が下から巻き上げて砕き、きらめきが昇る
+      //   marks … 弱体の印の数   radius … 渦の大きさ   markColor … 弱体の印の色
+      refresh: {
+        shape: "refresh", duration: 1100, glow: 14, hitAt: 0.45, color: "#8fe3d0", markColor: "#a58bd0",
+        marks: 6, radius: 46, stars: 12
+      },
+      // ハッシュ。相手の左右から音の波が出て、縮みながら平らな線になって消え（静寂）、頭の上に封印の輪が閉じる。色は封印の紫
+      //   waves … 片側の音の波の数
+      hush: {
+        shape: "hush", duration: 1100, glow: 12, hitAt: 0.5, color: "#a77bd6",
+        waves: 3, radius: 40
+      },
+      // かばう。横から大きな盾が滑りこんで体の前に立ち、ぶつかった輪が広がって、光がなでる
+      //   shield … 盾の大きさ   from … 盾が来る横の距離
+      guardAlly: {
+        shape: "guardAlly", duration: 900, glow: 12, hitAt: 0.28, color: "#ffcf6b",
+        shield: 34, from: 120
+      },
+      // 分け与え。PPの紫の玉が上から弧を描いて降り、体に吸いこまれて、まわりの輪が半分まで満ちる
+      //   orbs … 玉の数   radius … 満ちる輪の大きさ
+      sharePp: {
+        shape: "sharePp", duration: 1100, glow: 14, hitAt: 0.35, color: "#8b6fd6", accentColor: "#d9ccff",
+        orbs: 7, radius: 46
+      },
+      // 先手打ち。速い筋が横から集まり、相手の上で鋭い星がはじけ、残像の矢じりが流れる
+      //   streaks … 速い筋の数   star … 星の大きさ
+      quickStrike: {
+        shape: "quickStrike", duration: 560, glow: 12, hitAt: 0.3,
+        streaks: 8, star: 34
+      },
+      // 黄昏の風。夕焼け色の風の帯が並びを左から右へ吹き抜け、相手のまわりの強化の印（上向きの矢じり）を吹き飛ばす
+      //   buffColor … 強化の印の色   marks … 相手ごとの印の数   streaks … 風の筋の数
+      duskWind: {
+        shape: "duskWind", duration: 1200, glow: 12, hitAt: 0.25, color: "#f0a060", accentColor: "#b88ae0", buffColor: "#5fd18c",
+        spread: 280, height: 90, marks: 4, streaks: 14
+      },
+
+      // 属性の共鳴の3段目（2026-11-26）。2段目（フレイム・ウェーブ・ゲイル・ロックスパイク）の一段上
+      // ブレイズ。炎の舌が相手のまわりを渦を巻いて昇り、真ん中で白く光って、火柱と火の粉が上へはじける
+      //   tongues … 渦の炎の数   radius … 渦の大きさ   embers … 火の粉の数
+      blazeVortex: {
+        shape: "blazeVortex", duration: 900, glow: 20, hitAt: 0.45, accentColor: "#ffd75e",
+        tongues: 10, radius: 50, height: 100, embers: 18
+      },
+      // トレント。左から太い水流がまっすぐ打ちこみ、しぶきが上がり、吸い取った水の粒が左へ流れ戻る
+      //   width … 水流の太さ   drops … しぶきの数   drain … 流れ戻る粒の数
+      torrentJet: {
+        shape: "torrentJet", duration: 1000, glow: 14, hitAt: 0.2, foamColor: "#e8fbff", deepColor: "#1d4f8a",
+        width: 34, length: 260, drops: 16, drain: 10
+      },
+      // サイクロン。相手ごとに足元から竜巻が立ち、上へ広がりながら回って、葉と粒が巻き上がる（全体）
+      //   funnelHeight … 竜巻の高さ   rings … 輪の数   debris … 巻き上がる粒の数
+      cycloneFunnel: {
+        shape: "cycloneFunnel", duration: 1000, glow: 12, hitAt: 0.2,
+        funnelHeight: 130, rings: 7, debris: 10
+      },
+      // ロックバースト。まわりから岩が集まって大岩になり、ひびが光って、四方へ炸裂する。足元に土煙の輪
+      //   gather … 集まる岩の数   boulder … 大岩の大きさ   shards … 炸裂するかけらの数
+      rockBurst: {
+        shape: "rockBurst", duration: 950, glow: 10, hitAt: 0.5,
+        gather: 9, boulder: 30, shards: 18
+      },
+      // プリズム。相手の上に光の三角柱が現れ、上から入った白い光が6色に分かれて相手へ降り注ぎ、星がまたたく
+      //   prismSize … 三角柱の大きさ   colors … 分かれる光の色
+      prism: {
+        shape: "prism", duration: 1050, glow: 16, hitAt: 0.42, prismSize: 22,
+        colors: ["#ff8a8a", "#ffc27a", "#fff38a", "#8affc1", "#8ad1ff", "#c49aff"]
+      },
+      // アビス。足元に闇の淵が開いて渦を巻き、闇の手が伸びて、闇の球が相手を呑みこみ、淵へ沈んで消える
+      //   radius … 淵の大きさ   tendrils … 闇の手の数
+      abyss: {
+        shape: "abyss", duration: 1250, glow: 16, hitAt: 0.5, darkColor: "#12081f", rimColor: "#c9b8ff",
+        radius: 60, tendrils: 6
+      },
+      // プラズマ。相手ごとに電気の球がはじけ、球と球のあいだを稲妻がつなぎ、最後に球がはじける（全体）
+      //   orb … 球の大きさ
+      plasma: {
+        shape: "plasma", duration: 1250, glow: 20, hitAt: 0.25, orb: 34
+      },
+
+      // 属性の共鳴の4段目（最上位。2026-11-26）。画面を属性の色に染めて、大きく派手に出す
+      // インフェルノ。画面が赤く染まる → 足元に溶岩の魔法陣が開く → 巨大な火柱が噴き上がり、閃光と衝撃の輪
+      //   → 火の玉が四方へ降り、火の粉が舞う → 足元に炎の輪が燃え残る
+      //   pillar / pillarHeight … 火柱の太さと高さ   meteors … 降る火の玉の数   ring … 燃え残る炎の数
+      inferno: {
+        shape: "inferno", duration: 1750, glow: 26, hitAt: 0.28, accentColor: "#ffd75e", deepColor: "#5a0a02",
+        radius: 80, pillar: 120, pillarHeight: 280, meteors: 8, embers: 40, ring: 14
+      },
+      // メイルシュトローム。画面が深い青に染まる → 足元に巨大な渦が開いて速く回る → 渦から水の壁がせり上がって相手を包む
+      //   → 水の壁が崩れて大きなしぶき → 吸い取った水が3本の流れになって左へ戻る
+      //   radius … 渦の大きさ   walls / wallHeight … 水の壁の数と高さ
+      maelstrom: {
+        shape: "maelstrom", duration: 1750, glow: 18, hitAt: 0.4, foamColor: "#e8fbff", deepColor: "#0b2a55",
+        radius: 120, arms: 5, walls: 16, wallHeight: 190, drops: 30
+      },
+      // テンペスト。画面が深い緑に染まる → 風の筋が何本も画面を駆け抜ける → 相手ひとりずつの足元から巨大な竜巻
+      //   → 竜巻の中で風の刃が相手を斬り、足元に衝撃の輪 → 大きな突風が画面を薙いで、竜巻がほどけて広がる（全体）
+      //   streaks … 風の筋の数   funnelHeight / levels … 竜巻の高さと段の数   debris … 巻き上がる木の葉の数
+      tempest: {
+        shape: "tempest", duration: 1700, glow: 16, hitAt: 0.35, accentColor: "#effff6", deepColor: "#0b2a1d",
+        streaks: 28, funnelHeight: 210, levels: 14, debris: 12
+      },
+      // テラバースト。画面が土の色に染まる → 並びの真ん中から左右へ大地の割れ目が走り、マグマのような光が漏れる
+      //   → 相手ひとりずつの足元から岩の柱が突き上がる → 破片・土煙・衝撃の輪 → 体に光るひびが残る（全体）
+      //   spikes / spikeHeight … 岩の柱の数と高さ   rocks … 飛び散る破片の数
+      terraBurst: {
+        shape: "terraBurst", duration: 1700, glow: 8, hitAt: 0.4, accentColor: "#ffb347", deepColor: "#2a1606",
+        rockColor: "#5a4026", spikes: 7, spikeHeight: 150, rocks: 14
+      },
+      // セイントノヴァ。画面が暗い藍に沈む → 相手に重なって聖なる魔法陣（二重の輪と六芒星）が開き、光が集まる
+      //   → 魔法陣が1点に縮んで大爆発。画面が白く光り、光芒と大きな十字の星、衝撃の輪 → 光の十字架と降る光の粒
+      //   radius … 魔法陣の大きさ   rays / rayLength … 光芒の数と長さ
+      saintNova: {
+        shape: "saintNova", duration: 1700, glow: 24, hitAt: 0.42, accentColor: "#ffe08a", deepColor: "#120e2a",
+        radius: 78, rays: 18, rayLength: 380, motes: 28, sparkles: 26
+      },
+      // グランドネビュラ。ダークネビュラの超進化として、並び全体に1つの大きな星雲を出す（作者の指定 11-26）
+      //   画面が闇に沈み星がまたたく → 並びの真ん中に、紫と桃色の腕が渦を巻く巨大な星雲が開く
+      //   → 速く回りながら真ん中へ吸い込まれて黒い穴になる → 並び全体を覆う闇の爆発・紫の破片と輪
+      //   → 相手ひとりずつに闇が沈み、呪いの靄が昇る（全体）
+      //   spread / flatten … 星雲の広さと平たさ   arms / puffs … 腕の数と腕ごとの雲の数   twinkles … 中で瞬く星   shards … 破片
+      grandNebula: {
+        shape: "grandNebula", duration: 1750, glow: 18, hitAt: 0.45, accentColor: "#e07ad8", deepColor: "#06020e",
+        starColor: "#e6dcff", stars: 40, spread: 400, flatten: 0.34, arms: 3, puffs: 22, twinkles: 26, shards: 28
+      },
+      // ジャッジメント。画面が夜空の色に沈む → 相手の上に雷の紋章が開いて回り、輪の上を稲妻が走る
+      //   → 紋章から光の柱と巨大な稲妻が落ち、画面が白く光る → まわりに追いの雷・足元を這う稲妻・衝撃の輪 → 体のまわりで稲妻がはじける
+      //   sigil / sigilMinY … 紋章の大きさと、画面の上で止める高さ   column … 光の柱の太さ   branches … 足元を這う稲妻の数
+      judgment: {
+        shape: "judgment", duration: 1700, glow: 22, hitAt: 0.45, accentColor: "#fffbe0", deepColor: "#090b1c",
+        sigil: 96, sigilMinY: 22, column: 70, branches: 9
+      },
+
+      // 1.8.0 の斬撃（2026-11-26）。当たる瞬間（hitAt）で数字が出る
+      // 閃光斬り。白い芯の光の刃がまっすぐ走る → 切り口で十字の星と横の光の筋・光の輪 → 光の欠片が散る
+      //   length / width … 刃の長さと太さ   flare … 十字の星の大きさ   shards … 欠片の数
+      lightSlash: {
+        shape: "lightSlash", hitSe: "slash", duration: 640, glow: 16, hitAt: 0.18,
+        length: 170, width: 12, flare: 46, shards: 12
+      },
+      // 影斬り。うすい影の刃が2本先に走り、紫の縁に黒い芯の刃が続く → 切り口から黒い煙が滲んで垂れ、細い影がうねる
+      //   accentColor … 黒い芯と煙の色   smoke … 煙の数
+      shadowSlash: {
+        shape: "shadowSlash", hitSe: "slash", duration: 720, glow: 12, hitAt: 0.22, accentColor: "#1a0c30",
+        length: 170, width: 13, smoke: 14
+      },
+      // 紅蓮斬り。炎の三日月が2本、× の字に走って炎の舌が立つ → 交わったところで爆炎が四方へ噴き出し、衝撃の輪 → 火の粉
+      //   radius / width … 太刀筋の大きさと太さ   flameHeight … 炎の舌の高さ   burst … 噴き出す炎の数
+      crimsonSlash: {
+        shape: "crimsonSlash", hitSe: "slash", duration: 950, glow: 18, hitAt: 0.3, accentColor: "#ffd75e", deepColor: "#b3150a",
+        radius: 96, width: 30, flameHeight: 70, burst: 12, embers: 18
+      },
+      // 雫断ち（ウルヴァーグの絆の技）。上から雫が落ちてくる → 左から速い水の筋が走り、雫が落ちきる前に一閃 →
+      // 雫が二つに割れて左右へ落ち、切り口から細かいしぶきが散る
+      //   length / width … 一閃の長さと太さ   drop … 雫の大きさ   streaks … 速い筋の数   drops … しぶきの数
+      dropCleave: {
+        shape: "dropCleave", hitSe: "slash", duration: 720, glow: 14, hitAt: 0.34, accentColor: "#e8fbff", deepColor: "#1d5fa8",
+        length: 200, width: 9, drop: 16, streaks: 7, drops: 14, minSize: 2, maxSize: 4
+      },
+      // 激流斬り。水の刃が相手のまわりを回り込んで横一文字に薙ぐ → 切り口から水が噴き出し、泡の輪 → 吸い取った水が2本の流れで左へ戻る
+      //   radius / width … 薙ぐ輪の大きさと刃の太さ   drops … しぶきの数
+      torrentSlash: {
+        shape: "torrentSlash", hitSe: "slash", duration: 950, glow: 14, hitAt: 0.3, accentColor: "#e8fbff", deepColor: "#1d5fa8",
+        radius: 96, width: 22, drops: 22, jets: 6
+      },
+      // 旋風斬り。風の刃が3枚、相手のまわりを回りながら輪を縮める → × の字に鋭い筋が2本 → 風の筋と木の葉がらせんで上へ抜ける
+      //   radius … 旋風の始めの大きさ   length … × の筋の長さ   leaves … 木の葉の数
+      whirlSlash: {
+        shape: "whirlSlash", hitSe: "slash", duration: 850, glow: 14, hitAt: 0.32, accentColor: "#effff6",
+        radius: 92, length: 160, leaves: 10
+      },
+      // 大地斬り。太い刃が真上から足元まで振り下ろされる → 足元から左右へ大地が割れ、岩の柱が順に突き上がる → かけらと土煙
+      //   length / width … 刃の長さと太さ   spikes / spikeHeight … 岩の柱の数と高さ   rocks … かけらの数
+      earthSlash: {
+        shape: "earthSlash", hitSe: "slash", duration: 900, glow: 8, hitAt: 0.28, accentColor: "#f3dfae", rockColor: "#5a4026",
+        length: 200, width: 13, spikes: 6, spikeHeight: 70, rocks: 14
+      },
+      // 雷神斬り。稲妻をまとった刃が走る → 切り口へ上から太い稲妻が落ちて大きく光る → 四方へ稲妻が走り火花が散る → 体のまわりで小さな稲妻がはじける
+      //   topMinY … 稲妻が落ち始める高さ（画面の上の端で止める）   arcs … 四方へ走る稲妻の数
+      raijinSlash: {
+        shape: "raijinSlash", duration: 900, glow: 18, hitAt: 0.3, accentColor: "#fffbe0",
+        length: 180, width: 14, topMinY: 8, arcs: 8
+      },
+      // 聖光斬り。縦に一閃、続けて横に一閃して光の十字が残る → 十字が強く光り、光の柱と輪 → 金の羽根が舞い落ちる
+      //   length … 十字の大きさ   feathers … 羽根の数
+      holySlash: {
+        shape: "holySlash", hitSe: "slash", duration: 950, glow: 18, hitAt: 0.32, accentColor: "#ffe08a",
+        length: 170, feathers: 8
+      },
+      // 黒影斬り。切り上げる刃が黒い残像を4枚引き連れて走る → 切り口が黒い裂け目になって開き、ふちが紫に脈打つ
+      //   → 裂け目から影の手が伸びて相手をつかみ、紫の粒が沈む
+      darkShadowSlash: {
+        shape: "darkShadowSlash", hitSe: "slash", duration: 950, glow: 14, hitAt: 0.3, accentColor: "#1a0c30", pinkColor: "#e07ad8",
+        length: 190
+      },
+      // 乱れ斬り。1回当たるごとに、毎回ちがう向きに鋭い筋が2本すばやく走り、交わったところで火花が散る（3〜4回）
+      wildSlash: {
+        shape: "wildSlash", hitSe: "slash", duration: 420, glow: 10, hitAt: 0.2, color: "#dfe6f0",
+        length: 150
+      },
+      // 会心斬り。急所に赤い照準が縮みながら合わさり、きらりと光る → 細く鋭い筋が一瞬で貫く → 赤と金の星がはじけ、鋭い線が四方へ
+      //   length … 筋の長さ
+      criticalSlash: {
+        shape: "criticalSlash", hitSe: "slash", duration: 800, glow: 14, hitAt: 0.42, color: "#ff5a5a", accentColor: "#fff3c4",
+        length: 220
+      },
+      // 薙ぎ払い。並び全体に1回だけ出す。右から左へ、並びより広い三日月の刃が横に走り、通り過ぎた相手ごとに切り傷と火花
+      //   spread / height … 刃が描く弧の横の広さと高さ
+      sweepSlash: {
+        shape: "sweepSlash", hitSe: "slash", duration: 800, glow: 12, hitAt: 0.25, color: "#dfe6f0",
+        spread: 400, height: 70
+      },
+      // 渾身斬り。橙の力の輪が何重にも縮み、空気が震える → とても太い刃が重く一気に走る → 白く光り、横に衝撃波が2つ。切り口が光って残る
+      //   length / width … 刃の長さと太さ   accentColor … 力の色
+      allOutSlash: {
+        shape: "allOutSlash", hitSe: "slash", duration: 1000, glow: 14, hitAt: 0.45, color: "#e8eef8", accentColor: "#ff8a3c",
+        length: 240, width: 24
+      },
+      // つるぎの舞。1回当たるごとに、細い刃が3枚リボンの跡を引いて相手のまわりを回り、真ん中で交わって花びらの光が散る（3〜6回）
+      swordDance: {
+        shape: "swordDance", hitSe: "slash", duration: 520, glow: 12, hitAt: 0.4, color: "#c8e6ff", accentColor: "#ff9ad5"
+      },
+      // ばくれつけん。1回当たるごとに、体の3か所へすばやく続けて拳が当たる（4回）。当たるところは毎回変わる
+      burstFist: {
+        shape: "burstFist", duration: 420, glow: 10, hitAt: 0.2, color: "#ffb870"
+      },
+      // 陽炎の舞。味方ひとりずつに、足元から揺れる熱の筋が立ち昇り、体の左右にうすい影の姿が2つずれて揺れる。金の粒が昇る
+      //   waves / height … 熱の筋の数と高さ   shift … 影の姿がずれる幅   motes … 粒の数
+      heatHaze: {
+        shape: "heatHaze", duration: 1100, glow: 12, hitAt: 0.35, color: "#ffb35e", accentColor: "#ffe08a",
+        waves: 10, height: 110, shift: 26, motes: 14
+      },
+      // ハッスルダンス。1回回復するごとに、音符が2つ跳ねて飛び出し、緑の十字がぽんと膨らんで紙吹雪が散る（3〜6回）
+      //   confetti … 紙吹雪と音符の色   pieces … 紙吹雪の数
+      hustleDance: {
+        shape: "hustleDance", duration: 640, glow: 10, hitAt: 0.3, color: "#5fd18c",
+        confetti: ["#ffd75e", "#ff8ad8", "#7fd9ff", "#5fd18c"], pieces: 14
+      },
+      // 彗星のサンバ。1回当たるごとに、上の左か右から光の尾を引いた彗星が飛んできて当たり、星がはじける（4回）
+      //   reach / drop … 彗星が飛んでくる横と上の距離   topMinY … 画面の上の端で止める高さ
+      cometSamba: {
+        shape: "cometSamba", duration: 520, glow: 14, hitAt: 0.45, color: "#9fe8ff", accentColor: "#ffe08a",
+        reach: 200, drop: 150, topMinY: 6
+      },
+      // 不動のボレロ。1回当たるごとに、青い四角の紋章が回りながら降りてきて、どしんと落ちる。地面に四角い衝撃と土ぼこり（4回）
+      //   size … 紋章の大きさ
+      steadyBolero: {
+        shape: "steadyBolero", duration: 560, glow: 12, hitAt: 0.4, color: "#4fb0d1", accentColor: "#d8f2ff",
+        size: 34
       }
     }
   };

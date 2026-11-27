@@ -125,6 +125,10 @@
       // そこで 1.0秒 から 50.585805秒 までを繰り返す（どちらも重なる所の中。頭の 0.1秒 は響きの入り方が違うので避けた）。2026-11-18 に私が測り、11-19 に作者が聞いて了承
       // 音量は萌芽の穴の戦闘曲（hougaBattle 0.69）と同じ聞こえになる値（RMS 0.2206 と 0.2448 の比で 0.77）
       taikaiBattle: { file: "taikai_battle.dat", volume: 0.77, loopStart: 1.0, loopEnd: 50.585805 },
+      // 涵養の穴のふつうの戦闘曲（v1.8.0。作者が足した曲 2026-11-27）。63.05秒・音は 0.1035秒から最後まで鳴る。
+      // 音量は萌芽の穴の戦闘曲と同じ聞こえ（RMS 0.2453 と 0.2448 でほぼ同じなので 0.69 のまま）。
+      // 終わりは前のどこかと重なる作りではないので、いまは最後まで来たら音の始まり（0.1035秒）へ戻す（戻り先は作者が聞いて決める）
+      kanyouBattle: { file: "kanyoubattle.dat", volume: 0.69, loopStart: 0.1035 },
       // 主との戦い。萌芽の穴の主もこの曲（作者の指定）。戻り先 6.18126秒（2026-11-03 作者が決めた）
       boss:    { file: "abyss_bossbattle.dat", volume: 0.8, loopStart: 6.18126 },
       // 勝ったときの曲。戦闘曲を止めてから流し、繰り返さない（BattleScene の battleEnd）
@@ -218,8 +222,41 @@
       bubble:      { file: "se_awa.dat",          volume: 0.45 },   // あわ
       bodyPress:   { file: "se_bodypress.dat",    volume: 0.45 },   // ボディプレス
       venomSting:  { file: "se_dokubari.dat",     volume: 0.45 },   // どくばり
-      // 〇〇ベール（7属性とも同じ音。自作）。ほかの技の音より 2dB ほど大きいので、0.45 から少し下げてそろえた
+      // エレメントバリア（自作）。ほかの技の音より 2dB ほど大きいので、0.45 から少し下げてそろえた
       veil:        { file: "se_veil.dat",         volume: 0.37 },
+      // 作者が作った音（2026-11-26。assets/audio/効果音の一覧.md）。音の大きさはほかの技の音と同じくらいなので 0.45 にそろえた
+      // 共鳴の4段目
+      fire4:    { file: "se_fire_4.dat",    volume: 0.45 },   // インフェルノ
+      water4:   { file: "se_water_4.dat",   volume: 0.45 },   // メイルシュトローム
+      wind4:    { file: "se_wind_4.dat",    volume: 0.45 },   // テンペスト
+      earth4:   { file: "se_earth_4.dat",   volume: 0.45 },   // テラバースト
+      light4:   { file: "se_light_4.dat",   volume: 0.45 },   // セイントノヴァ
+      dark4:    { file: "se_dark_4.dat",    volume: 0.45 },   // グランドネビュラ
+      thunder4: { file: "se_thunder_4.dat", volume: 0.45 },   // ジャッジメント
+      // 属性の斬撃（下の段と上の段で同じ音）。この音があるので、当たったときの斬撃音は重ねない
+      slashFire:    { file: "se_slash_fire.dat",    volume: 0.45 },   // 火炎斬り・紅蓮斬り
+      slashWater:   { file: "se_slash_water.dat",   volume: 0.45 },   // 流水斬り・激流斬り
+      slashWind:    { file: "se_slash_wind.dat",    volume: 0.45 },   // 疾風斬り・旋風斬り
+      slashEarth:   { file: "se_slash_earth.dat",   volume: 0.45 },   // 岩砕斬り・大地斬り
+      slashThunder: { file: "se_slash_thunder.dat", volume: 0.45 },   // 稲妻斬り・雷神斬り
+      slashLight:   { file: "se_slash_light.dat",   volume: 0.45 },   // 閃光斬り・聖光斬り
+      slashDark:    { file: "se_slash_dark.dat",    volume: 0.45 },   // 影斬り・黒影斬り
+      // 最上位のブレス
+      fireBreathMax:    { file: "se_fire_breath_max.dat",    volume: 0.45 },   // 焦熱地獄
+      waterBreathMax:   { file: "se_water_breath_max.dat",   volume: 0.45 },   // 怒濤海嘯
+      darkBreathMax:    { file: "se_dark_breath_max.dat",    volume: 0.45 },   // 冥府魔道
+      windBreathMax:    { file: "se_wind_breath_max.dat",    volume: 0.45 },   // 千刃旋風
+      earthBreathMax:   { file: "se_earth_breath_max.dat",   volume: 0.45 },   // 大地崩落
+      lightBreathMax:   { file: "se_light_breath_max.dat",   volume: 0.45 },   // 光芒万丈
+      thunderBreathMax: { file: "se_thunder_breath_max.dat", volume: 0.45 },   // 万雷轟天
+      // 起こす（リザレクト・リザレクション）。起きたときの回復の音は重ねない（BattleScene）
+      revive:    { file: "se_revive.dat",    volume: 0.45 },
+      // 体技など
+      senteuchi: { file: "se_senteuchi.dat", volume: 0.45 },   // 先手打ち
+      guard:     { file: "se_guard.dat",     volume: 0.45 },   // かばう・立ち塞がる（強化の音は重ねない）
+      charge:    { file: "se_charge.dat",    volume: 0.45 },   // ちからため（強化の音は重ねない）
+      // デス・デスラ・死の踊り・死神の鎌を出した瞬間。即死が入ったときは今までどおり statusInstantDeath
+      death:     { file: "se_death.dat",     volume: 0.45 },
 
       // 状態異常。data/statuses.js の se から指す（掛かった瞬間と毒のダメージで鳴る）。
       // ★ 即死は、この音が「倒れる」音を兼ねる（直後の faint は鳴らさない。BattleScene）

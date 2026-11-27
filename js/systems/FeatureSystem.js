@@ -225,7 +225,7 @@
    *   蔦這う回廊の絡み主根は B4F だけ。2026-10-27）
    */
   FeatureSystem.prototype._effectFor = function (definition, type, floor, game) {
-    var effect = definition.effect || {};
+    var effect = this._withRegionCommon(definition.effect || {}, type);
     var extra = (this.dungeon.featureTables || {})[type];
     if (extra && floor !== undefined) {
       extra = extra.filter(function (entry) {
@@ -247,6 +247,29 @@
     }
     merged.table = effect.table.concat(extra);
     return merged;
+  };
+
+  /**
+   * 宝箱の「どこでも出る中身」を、穴ごとの品に置き換える（v1.8.0。data/regions.js の chestCommon）。
+   * 重みと個数はそのまま。置き換えが無ければ、元の effect をそのまま返す（共有物なので書き換えない）
+   */
+  FeatureSystem.prototype._withRegionCommon = function (effect, type) {
+    if (type !== "chest" || !effect.table) return effect;
+    var region = ((this.data.regions || {})[this.dungeon.region]) || null;
+    var swap = region && region.chestCommon;
+    if (!swap) return effect;
+    var copy = {};
+    for (var key in effect) {
+      if (Object.prototype.hasOwnProperty.call(effect, key)) copy[key] = effect[key];
+    }
+    copy.table = effect.table.map(function (entry) {
+      if (!swap[entry.item]) return entry;
+      var e = {};
+      for (var k in entry) if (Object.prototype.hasOwnProperty.call(entry, k)) e[k] = entry[k];
+      e.item = swap[entry.item];
+      return e;
+    });
+    return copy;
   };
 
   /** 指定マスにある、まだ使っていない仕掛けを返す */

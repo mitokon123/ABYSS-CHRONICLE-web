@@ -168,6 +168,7 @@
     // 絵をつけるのは、大きさと描き手の両方がそろっている画面だけ
     var iconSize = (this.sprites && this.rect.iconSize) || 0;
     var shift = t.selectedShift || 0;
+    var touchFont = (NS.isTouchMode && NS.isTouchMode() && t.touchMenuFont) || undefined;
 
     for (var i = 0; i < this.items.length; i++) {
       var item = this.items[i];
@@ -188,8 +189,9 @@
 
       // item.color を書くと、その色で描く（選べない項目を灰色にするなど）。
       // 選んでいる項目でも色は変えない。灰色のまま「▶」だけが動く
+      // 指で遊んでいるときは選択肢を一回り大きく（v1.8.0。theme.touchMenuFont。太字は Game.applyTouchText）
       this.panel.drawText(item.label, x, y,
-        { color: item.color || (selected ? t.cursorColor : t.textColor) });
+        { color: item.color || (selected ? t.cursorColor : t.textColor), font: touchFont });
 
       // item.badge を書くと、枠の右端に小さな札を出す（拠点の「作れる」「新入荷」など）。
       // 札の色は item.badgeColor。札の前の点だけゆっくり明滅させて目を引く

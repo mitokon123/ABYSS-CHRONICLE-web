@@ -49,6 +49,7 @@
  * dropOverrides : 区画ごとの落とすもの（2026-11-10）。{ 種族id: [drops と同じ書き方] }。
  *   その区画では、種族の drops（data/monsters.js）のかわりにこちらを使う（足すのではなく置き換え）。
  *   図鑑は区画で確率が違う種族だけ、区画ごとに分けて出す（DropSystem.dropsIn・DexScene）
+ * floorNotes  : その階へ降りたときに、「B4F へ降りた」の後ろに続けて出す一言（v1.8.0）。{ "4": "…" }
  * boss        : 最深階に出るボスのid（data/bosses.js を参照）
  *   書かない区画は「主なし」。最深階の階段が出口になり、抜けるとクリア（結果は「踏破」。蔦這う回廊 2026-10-27）
  * ready       : false と書くと「準備中」（名前は選択画面に出るが入れない）。中身を作り終えたら行ごと消す（v1.0.0）
@@ -194,6 +195,39 @@
         { type: "resistBonus", status: "all", value: 10 }
       ] };
   }
+
+  /**
+   * --- 滴る鍾乳洞の出現の表の1件ずつ（v1.8.0。作者の表 2026-11-26） ---
+   *   ミズマイマイ … 技を使う確率 55%。ウェーブ 50%・トレント 30%・スロウ 20%
+   *   シズクドリ   … 技を使う確率 40%。大渦 50%・先手打ち 35%・あわ 15%
+   *   セキジュン   … 技を使う確率 45%。クラック 40%・ロックスパイク 40%・スロウ 20%
+   *   ウルヴァーグ … 技を使う確率 45%。流水斬り 50%・先手打ち 20%・乱れ斬り 30%。何体でも出る（作者 2026-11-26「出現制限ないです」）
+   *   重みは種族の出やすさ（0.45 / 0.45 / 0.40 / 0.35）
+   */
+  // 敵のときだけの倍率 statMultiplier（作者の表 滴る鍾乳洞_敵の能力値.md 2026-11-27）。
+  //   作者の書いた Lv34 の値（素直・個体値0）にちょうどなる倍率。Lv33 にも同じ倍率が掛かる。
+  //   仲間にすると外れる（MonsterInstance.leaveEncounter）。成長率が変わったら測り直す
+  //   ミズマイマイ 215/53/99/43/60・シズクドリ 151/105/47/150/46・セキジュン 230/83/96/25/37・ウルヴァーグ 192/125/72/92/37
+  var DRIP_SNAIL = { species: "mizuMaimai", weight: 0.45,
+    skills: ["wave", "torrent", "slow"],
+    skillWeights: { wave: 50, torrent: 30, slow: 20 },
+    skillRate: 0.55,
+    statMultiplier: { hp: 1.164, defense: 1.408 } };
+  var DRIP_BIRD = { species: "shizukuDori", weight: 0.45,
+    skills: ["whirlpool", "quickStrike", "bubble"],
+    skillWeights: { whirlpool: 50, quickStrike: 35, bubble: 15 },
+    skillRate: 0.40,
+    statMultiplier: { attack: 1.205, speed: 1.228 } };
+  var DRIP_STONE = { species: "sekijun", weight: 0.40,
+    skills: ["crack", "rockSpike", "slow"],
+    skillWeights: { crack: 40, rockSpike: 40, slow: 20 },
+    skillRate: 0.45,
+    statMultiplier: { hp: 1.133, attack: 1.106, defense: 1.093 } };
+  var DRIP_WOLF = { species: "ulvarg", weight: 0.35,
+    skills: ["flowSlash", "quickStrike", "wildSlash"],
+    skillWeights: { flowSlash: 50, quickStrike: 20, wildSlash: 30 },
+    skillRate: 0.45,
+    statMultiplier: { hp: 1.127, attack: 1.391, defense: 1.237, speed: 1.087 } };
 
   NS.rawData.dungeons = {
     mossyMine: {
@@ -703,7 +737,7 @@
      * ★ 主がいる（作者 2026-10-30）。主は下のカラクリモリ。
      *   作者が決めた値（2026-11-01）：Lv32・主のとき HP1050 攻135 防65 速40・PP無限（infinitePp）・
      *   1ターンに1〜2回動く（actionsPerTurn）・仲間にできる・落とすものは私に任された（琥珀の芯を案として入れた）・
-     *   効かない状態異常は毒と麻痺（immuneToStatus: ["poison", "paralysis"]。全主共通の即死・封印・盲目も効かない。眠り・呪いは効く）
+     *   効かない状態異常は毒と麻痺（immuneToStatus: ["poison", "paralysis"]。全主共通の即死も効かない。v1.8.0 から封印3・盲目3・呪い5・眠り0 を主のあいだだけの値にした）
      * モチーフ（作者 2026-11-01）：琥珀と樹液（千年の時）＋千年樹の番人＋機械のモンスター。
      * 在来種（作者 2026-11-04）：4種・4階・Lv28〜31。ウェポン・ジュエル・コハクカブト・ジュエキスライム（data/monsters.js。4種とも作者が確定）。
      * 主（作者 2026-11-03）：大きなからくり（木と真鍮・根が絡む・胸に琥珀の芯）。雷・弱点は地・特性は放電。
@@ -782,6 +816,101 @@
       },
       // 主（v1.3.0。data/bosses.js）。B4F の階段で出る
       boss: "rootsWarden"
+    },
+
+    /**
+     * 涵養の穴の1つ目の区画（v1.8.0）。
+     * 作者が決めた（2026-11-27）：5階・見た目は任された（theme drip）・開くのはクロニクル杯の予選を勝ち抜いたあと・
+     *   宝箱は主の素材と珍しい素材（落とす率の低いもの）以外が出る。在来種の出方は作者の表（2026-11-26）。
+     * ★ 主はハンザキ（作者の表 2026-11-27。data/bosses.js の dripWarden）。2026-11-27 に ready: false を消して遊べるようにした（作者「開きましょう」）。
+     *   一言・説明・宝箱の重み・仕掛けの数は私の案（作者の見ての返事待ち）。推奨Lv は 34（作者 2026-11-27「推奨上げて34」。33 は仮だった）
+     */
+    drippingCave: {
+      id: "drippingCave",
+      order: 8,
+      region: "kanyou",
+      name: "滴る鍾乳洞",
+      // 1行は句読点こみで20文字まで
+      subtitle: "雫の音だけが、時を数える。",
+      description: "天井から雫が落ち続ける、石灰の洞。\n" +
+                   "長い時をかけて育った石の柱のあいだを、\n" +
+                   "水と共に生きるものたちが行き交う。",
+      floors: 5,
+      recommendedLevel: 34,
+      unlockedBy: { event: "chronicleQualifier", eventName: "クロニクル杯の予選" },
+      theme: "drip",
+      generation: { width: 40, height: 28, roomMin: 4, roomMax: 10, roomCount: 11, attempts: 320 },
+      // 1階に置く仕掛けの数は千年樹の根底と同じ
+      features: {
+        chest:  { min: 4, max: 5 },
+        spring: { min: 0, max: 1 },
+        trap:   { min: 1, max: 2 }
+      },
+      // 宝箱（作者 2026-11-27「主と確率10％の素材以外が出る」）。響きの真珠（落とす 10%）・狼牙の首飾り（6.67%）と主の素材は入れない。
+      // 割合は作者の表（滴る鍾乳洞_階ごとの出現案.md 2026-11-27）。重みはそのまま百分率
+      // 主（v1.8.0。作者の表 ハンザキ.md 2026-11-27。data/bosses.js）。B5F の階段で出る
+      boss: "dripWarden",
+      // B4F は狼の階（作者の表）。降りたときに知らせる（作者「入れましょう」2026-11-27。文は私の案）
+      floorNotes: { "4": "狼の遠吠えが、水音に混じって響く……" },
+      featureTables: {
+        chest: [
+          { item: "snailShell",      weight: 0.25, min: 1, max: 2 },
+          { item: "dropFeather",     weight: 0.25, min: 1, max: 2 },
+          { item: "stalagmiteShard", weight: 0.19, min: 1, max: 2 },
+          { item: "blueWolfClaw",    weight: 0.16, min: 1, max: 1 },
+          { item: "elixir",          weight: 0.12, min: 1, max: 1 },
+          { item: "abyssFragment",   weight: 0.03, min: 1, max: 1 }
+        ]
+      },
+      /**
+       * 階ごとの出方（作者の表 滴る鍾乳洞_階ごとの出現案.md 2026-11-27。私の案を作者が書き換えた）。ほかの穴の種族は混ぜない。
+       * B4F はウルヴァーグの階（狼 90%・出会う確率 12.5%）。主の前の B5F は 7% に下がる。
+       *   階   Lv     体数（1/2/3体）   マイマイ ドリ セキジュン ウルヴァーグ  出会う確率
+       *   B1F 33      50/50/ 0%         40%      40%  15%        5%          8.6%
+       *   B2F 33      30/50/20%         35%      32%  23%       10%          8.6%
+       *   B3F 33〜34  20/50/30%         33%      32%  25%       10%          8.6%
+       *   B4F 34      15/45/40%          4%       4%   2%       90%         12.5%
+       *   B5F 34       7/43/50%         30%      30%  30%       10%          7%
+       * 敵のときの倍率（DRIP_* の statMultiplier）はどの階も同じ
+       */
+      encounter: {
+        rate: 0.086,
+        groupSize: { min: 1, max: 3 },
+        levelRange: { min: 33, max: 34 },
+        table: [ DRIP_SNAIL, DRIP_BIRD, DRIP_STONE, DRIP_WOLF ],
+        perFloor: {
+          "1": {
+            rate: 0.086,
+            levelRange: { min: 33, max: 33 },
+            groupSize: [ { count: 1, weight: 0.5 }, { count: 2, weight: 0.5 } ],
+            table: [ ivyAt(DRIP_SNAIL, 0.40), ivyAt(DRIP_BIRD, 0.40), ivyAt(DRIP_STONE, 0.15), ivyAt(DRIP_WOLF, 0.05) ]
+          },
+          "2": {
+            rate: 0.086,
+            levelRange: { min: 33, max: 33 },
+            groupSize: [ { count: 1, weight: 0.3 }, { count: 2, weight: 0.5 }, { count: 3, weight: 0.2 } ],
+            table: [ ivyAt(DRIP_SNAIL, 0.35), ivyAt(DRIP_BIRD, 0.32), ivyAt(DRIP_STONE, 0.23), ivyAt(DRIP_WOLF, 0.10) ]
+          },
+          "3": {
+            rate: 0.086,
+            levelRange: { min: 33, max: 34 },
+            groupSize: [ { count: 1, weight: 0.2 }, { count: 2, weight: 0.5 }, { count: 3, weight: 0.3 } ],
+            table: [ ivyAt(DRIP_SNAIL, 0.33), ivyAt(DRIP_BIRD, 0.32), ivyAt(DRIP_STONE, 0.25), ivyAt(DRIP_WOLF, 0.10) ]
+          },
+          "4": {
+            rate: 0.125,
+            levelRange: { min: 34, max: 34 },
+            groupSize: [ { count: 1, weight: 0.15 }, { count: 2, weight: 0.45 }, { count: 3, weight: 0.4 } ],
+            table: [ ivyAt(DRIP_SNAIL, 0.04), ivyAt(DRIP_BIRD, 0.04), ivyAt(DRIP_STONE, 0.02), ivyAt(DRIP_WOLF, 0.90) ]
+          },
+          "5": {
+            rate: 0.07,
+            levelRange: { min: 34, max: 34 },
+            groupSize: [ { count: 1, weight: 0.07 }, { count: 2, weight: 0.43 }, { count: 3, weight: 0.5 } ],
+            table: [ ivyAt(DRIP_SNAIL, 0.30), ivyAt(DRIP_BIRD, 0.30), ivyAt(DRIP_STONE, 0.30), ivyAt(DRIP_WOLF, 0.10) ]
+          }
+        }
+      }
     }
   };
 })(window.MyGame);

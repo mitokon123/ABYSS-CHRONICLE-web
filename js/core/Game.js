@@ -15,6 +15,10 @@
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.data = gameData;
+    // 出来事で開く穴の条件（DungeonCatalog の event。v1.8.0）は、このゲームの済ませた印を見る
+    if (NS.DungeonCatalog) NS.DungeonCatalog.eventSource = this;
+    // 指で遊んでいるときは、文字を太く・小さい文字を少し大きくする（v1.8.0。data/ui.js の touchText）
+    Game.applyTouchText(this.ctx, (gameData.ui || {}).touchText);
     this.assets = assets;
 
     // プレイヤー設定。画面をまたいで保持し、中身はセーブファイルごとに切り替わる
@@ -463,6 +467,18 @@
 
   Game.prototype.isEventDone = function (eventId) {
     return !!(this.doneEvents && this.doneEvents[eventId]);
+  };
+
+  /**
+   * そのダンジョンから拠点へ戻った印（v1.8.0。物語の場面20「鍾乳洞から戻ったとき」の when.returned）。
+   * 結果の画面（ResultScene）を開いたときに付ける。クリア・帰還・全滅のどれでも付く。
+   * 出来事の印（doneEvents）に "returned:ダンジョンid" で残す（セーブの形は変えない）
+   */
+  Game.prototype.markDungeonReturned = function (dungeonId) {
+    if (dungeonId) this.markEventDone("returned:" + dungeonId);
+  };
+  Game.prototype.hasReturnedFrom = function (dungeonId) {
+    return this.isEventDone("returned:" + dungeonId);
   };
 
   /** 済ませた印を付ける。起きた瞬間に付けるので、逃げても負けても二度は起きない */
@@ -930,7 +946,9 @@
       var groupRandom = new NS.Random();
       var groupMul = NS.EffectSystem ? new NS.EffectSystem(this.data).getHealDealtMultiplier(user) : 1;
       for (var h = 0; h < hurt.length; h++) {
-        hurt[h].heal(Math.floor(groupRandom.nextInt(skill.heal.min, skill.heal.max) * groupMul));
+        // 全快（キュアリスオール。heal.full。v1.8.0）は減っているぶんだけ
+        hurt[h].heal(skill.heal.full ? hurt[h].getMaxHp() - hurt[h].currentHp
+                                     : Math.floor(groupRandom.nextInt(skill.heal.min, skill.heal.max) * groupMul));
       }
       if (cost && user.payPp) user.payPp(cost);
       return { success: true, allHealed: true };
@@ -967,8 +985,10 @@
     var max = (typeof spec.max === "number") ? spec.max : min;
     if (max < min) max = min;
     var amount = (max > min) ? new NS.Random().nextInt(min, max) : min;
-    // 使う側の「回復の技」への倍率（戦闘の BattleSystem._applyHeal と同じ）
-    if (NS.EffectSystem) {
+    // 使う側の「回復の技」への倍率（戦闘の BattleSystem._applyHeal と同じ）。全快（キュアリス。v1.8.0）は減っているぶんだけ
+    if (spec.full) {
+      amount = target.getMaxHp() - target.currentHp;
+    } else if (NS.EffectSystem) {
       amount = Math.floor(amount * new NS.EffectSystem(this.data).getHealDealtMultiplier(user));
     }
 
@@ -1298,10 +1318,12 @@
 
   /**
    * いまの拠点の場所（v1.5.0）。data/ui.js の home.places の id。null なら揺籃の穴のほとり（もとの景色）。
-   * 第二章の場面9「萌芽の穴へ」（hougaArrival）を見たあとは、萌芽の穴のほとり
+   * 第二章の場面9「萌芽の穴へ」（hougaArrival）を見たあとは、萌芽の穴のほとり。
+   * 第三章の場面19「涵養の穴へ」（kanyouArrival。v1.8.0）を見たあとは、涵養の穴のほとり
    */
   Game.prototype.getHomePlace = function () {
     var seen = (this.story && this.story.seen) || {};
+    if (seen.kanyouArrival) return "kanyou";
     return seen.hougaArrival ? "houga" : null;
   };
 
@@ -1328,17 +1350,20 @@
 
   /**
    * id を指して物語の場面を1つ流し、終わったら nextScene へ（v1.5.0。予選の場面14〜18）。
-   * きっかけ（trigger）では探さないので、続きの場面は流さない。見た印は付ける（repeat の場面は次も流れる）
+   * きっかけ（trigger）では探さないので、続きの場面は流さない。見た印は付ける（repeat の場面は次も流れる）。
+   * thenTrigger を渡すと、流し終えたあとにそのきっかけの場面を続けて探す（v1.8.0。予選を勝ち抜いた場面17 →
+   * 拠点へ戻るところで場面19「涵養の穴へ」）
    * @returns {boolean} 流したか（その場面が無ければ、すぐ nextScene へ移って false）
    */
-  Game.prototype.playStoryScene = function (sceneId, nextScene) {
+  Game.prototype.playStoryScene = function (sceneId, nextScene, thenTrigger) {
     var story = ((this.data.story || {}).scenes || {})[sceneId];
     if (!story) {
+      if (thenTrigger) return this.playStory(thenTrigger, nextScene);
       this.scenes.change(nextScene);
       return false;
     }
     this.story.markSeen(story.id);
-    this.scenes.change(new NS.StoryScene(this, story, nextScene, null));
+    this.scenes.change(new NS.StoryScene(this, story, nextScene, thenTrigger || null));
     return true;
   };
 
@@ -1420,6 +1445,46 @@
 
   Game.prototype._render = function () {
     this.scenes.render(this.ctx);
+  };
+
+  /**
+   * 指で遊んでいるときの文字（v1.8.0。作者の指定「スマホ版は はい・いいえ や数字などの見えにくい文字や
+   * 小さい文字を大きく太く見えるように」）。
+   *
+   * 画面の文字は 100 か所以上で ctx.font を決めているので、1つずつ直さずに、
+   * この ctx の font を決める入口で書き換える。指のとき（NS.isTouchMode）だけ：
+   *   ・太字にする（すでに太字のものはそのまま）
+   *   ・rule.sizes にある大きさは大きくする（12px → 14px など）
+   * キー・マウスで遊んでいるときは何も変えない。指とマウスを持ち替えたら、次に描くときから変わる。
+   *
+   * ★ スマホは 800×600 の画面を小さく縮めて見せるので、細い字（とくに iPhone の monospace の数字）がかすれる。
+   *   大きさは並びが崩れない範囲にしてある（data/ui.js の touchText）
+   */
+  Game.touchFont = function (font, rule) {
+    if (!rule) return font;
+    var out = String(font);
+    var m = /(^|\s)(\d+(?:\.\d+)?)px/.exec(out);
+    if (m && rule.sizes) {
+      var to = rule.sizes[String(parseFloat(m[2]))];
+      if (to) out = out.replace(m[0], m[1] + to + "px");
+    }
+    if (rule.bold && !/(^|\s)(bold|bolder|[6-9]00)(\s|$)/.test(out)) out = "bold " + out;
+    return out;
+  };
+
+  /** ctx の font を決める入口を、指のときだけ書き換えるものに差し替える */
+  Game.applyTouchText = function (ctx, rule) {
+    if (!ctx || !rule || typeof CanvasRenderingContext2D === "undefined") return;
+    var desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "font");
+    if (!desc || !desc.set || !desc.get) return;
+    Object.defineProperty(ctx, "font", {
+      configurable: true,
+      get: function () { return desc.get.call(this); },
+      set: function (value) {
+        var touch = NS.isTouchMode && NS.isTouchMode();
+        desc.set.call(this, touch ? Game.touchFont(value, rule) : value);
+      }
+    });
   };
 
   NS.Game = Game;

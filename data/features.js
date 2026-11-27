@@ -45,10 +45,12 @@
       // ここに書くのは「どのダンジョンでも出る中身」だけ。
       // その場所でしか出ない素材は data/dungeons.js の featureTables に書く
       //（上書きではなく追加されるので、下の3つはどこでも出続ける）
+      // ★ 穴ごとに、より強い品へ置き換わる（data/regions.js の chestCommon。v1.8.0 作者 2026-11-27）。重みはそのまま
+      // 薬草の重み 1.0 → 0.4（作者の表 宝箱と工房の道具_案.md 2026-11-27。どの穴も）
       effect: {
         type: "giveItem",
         table: [
-          { item: "herb",        weight: 1.0, min: 1, max: 1 },
+          { item: "herb",        weight: 0.4, min: 1, max: 1 },
           // PPは泉か拠点でしか戻らなかったので、拾えるようにした
           { item: "spiritBerry", weight: 0.3, min: 1, max: 1 },
           { item: "potion",      weight: 0.2, min: 1, max: 1 }

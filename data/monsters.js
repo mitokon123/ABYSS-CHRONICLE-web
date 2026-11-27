@@ -20,7 +20,7 @@
  *     0（＝そのまま通る）も使う。書き忘れとの区別は
  *     「全種そろっているか」を data の検査で見ればよい（早見表と突き合わせる）。
  *
- *   ★ 値は制作者が早見表（早見表/状態異常耐性.txt）で決めている。
+ *   ★ 値は制作者が早見表（早見表/技と特性.txt の「状態異常耐性」）で決めている。
  *     このファイルとその表は必ず同じ値にしておくこと。
  *
  *   ★ α-8 で大幅に下げた。**ほとんどの種族・ほとんどの状態異常は 0**。
@@ -32,8 +32,8 @@
  *           ヌマボネ 即死10（もう死んでいる）
  *
  *   ★ 主（ボス）として立ちはだかっているあいだは、
- *     data/battle.js の bossImmuneToStatus が 即死・封印・盲目 を無効にする（全ボス共通）。
- *     いまの主4体は data/bosses.js で毒も個別に無効にしてある。
+ *     data/battle.js の bossImmuneToStatus が 即死 を無効にする（全ボス共通）。
+ *     ほかの状態異常は data/bosses.js の immuneToStatus・statusResist で主ごとに決める（v1.8.0）。
  *     ここの値が効くのは、スカウトして仲間にしたあと。
  * maxLevel    : このモンスターのレベル上限（省略時は growth.js の defaultMaxLevel）
  *   growth.js の levelCap（99）を超えることはできない
@@ -58,7 +58,7 @@
  *   ★ いまの文章は作者が直したもの（α-9）。「魔物」とは書かず「モンスター」で統一する。
  *   ★ 弱い属性は「主人公が知っている弱点」だけを書く。耐性の数値と全部は合わないが、わざと。
  *     （雷は使えるモンスターが少なく、主人公がまだ試せていない。キングスライムなどに雷の弱点が無いのはそのため）
- *     一覧は 早見表/図鑑説明文.txt。**このファイルとその表は必ず同じ文にしておくこと**
+ *     一覧は 早見表/モンスターと絆.txt の「図鑑説明文」。**このファイルとその表は必ず同じ文にしておくこと**
  * records     : 愛情度の段階ごとに図鑑へ書き足される、主人公の記録（data/affection.js）。
  *   { used: "慣れの文", trust: "信頼の文", bond: "絆の文" } の形。キーは段階の id。
  *   その種族でいちばん深まった段階までが図鑑に出る。書いていない段階は何も出ない。
@@ -144,7 +144,7 @@
     slime: {
       id: "slime",
       name: "スライム",
-      // 愛情度で書き足される記録と、絆の報酬（早見表/絆と記録.txt。作者が決めたもの）
+      // 愛情度で書き足される記録と、絆の報酬（早見表/モンスターと絆.txt の「絆と記録」。作者が決めたもの）
       records: {
         used:  "水辺では、ほかのスライムと体を寄せ合って眠る。冷えると少し固くなる。",
         trust: "撫でられるのが好きで、手を止めると体を押しつけてくる。怒ると小さく震える。",
@@ -162,7 +162,7 @@
                       blind: 0, curse: 0, instantDeath: 5 },
       // 上限99の3種のうちの1体。強さで抜けるのではなく、長く付き合える枠
       maxLevel: 99,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 111/25/28/15/24・Lv30 155/35/49/26/34・Lv40 243/56/96/56/62・Lv50 333/84/148/99/140・Lv60 463/119/209/132/212・Lv99 742/241/375/208/501（HP/攻/防/速/PP）に
       //   ちょうどなるよう、防御・素早さ・PP の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       growthRate: {
@@ -197,11 +197,22 @@
         { level: 22, skill: "recklessTackle" },
         { level: 23, skill: "purifyRain" },
         { level: 24, skill: "guardSong" },
-        { level: 25, skill: "wardSongWater" },
+        { level: 24, skill: "guardAlly" },
         { level: 26, skill: "greaterCure" },
+        { level: 27, skill: "elementBarrier" },  // 1.8.0 作者の仕様（2026-11-26）：〇〇ベールをなくし、エレメントバリアに
         { level: 28, skill: "purifyLight" },
         { level: 31, skill: "resurrect" },
-        { level: 32, skill: "cureAll" }
+        { level: 32, skill: "cureAll" },
+        { level: 33, skill: "protection" },
+        { level: 36, skill: "curaris" },
+        { level: 40, skill: "torrent" },
+        { level: 42, skill: "resurrection" },
+        { level: 44, skill: "hustleDance" },
+        { level: 44, skill: "refresh" },
+        { level: 48, skill: "aegis" },
+        { level: 50, skill: "curarisAll" },
+        { level: 52, skill: "maelstrom" },
+        { level: 55, skill: "reversal" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       abilities: ["tough"],
       expReward: 8,
@@ -251,7 +262,7 @@
       // 上限99の3種のうちの1体。育て切ると素早さが全種で最も高くなる
       maxLevel: 99,
       // ステータスごとに成長率を変える例：素早さだけ伸びやすい
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 64/44/13/47/17・Lv30 102/62/20/77/30・Lv40 162/98/40/143/60・Lv50 225/146/89/243/127・Lv60 379/219/122/331/205・Lv99 747/343/232/537/389（HP/攻/防/速/PP）に
       //   ちょうどなるよう、HP・攻撃・防御 の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       growthRate: {
@@ -280,10 +291,21 @@
         { level: 9, skill: "drainBite" },
         { level: 23, skill: "doubleSlash" },
         { level: 24, skill: "galeSong" },
-        { level: 25, skill: "wardSongDark" },
+        { level: 24, skill: "crack" },
+        { level: 24, skill: "shadowSlash" },
         { level: 27, skill: "armorBreak" },
+        { level: 28, skill: "quickStrike" },
         { level: 30, skill: "purifyLight" },
-        { level: 40, skill: "resurrect" }
+        { level: 32, skill: "wildSlash" },
+        { level: 33, skill: "elementBarrier" },  // 1.8.0 作者の仕様（2026-11-26）：〇〇ベールをなくし、エレメントバリアに
+        { level: 36, skill: "quickle" },
+        { level: 40, skill: "resurrect" },
+        { level: 40, skill: "darkShadowSlash" },
+        { level: 42, skill: "collapse" },
+        { level: 42, skill: "warCry" },
+        { level: 46, skill: "cometSamba" },
+        { level: 50, skill: "accel" },
+        { level: 54, skill: "reflect" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       abilities: ["swiftFoot"],
       expReward: 8,
@@ -334,7 +356,7 @@
       statusResist: { poison: 0, paralysis: 2, sleep: 2, seal: 0,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.72 }, { from: 31, rate: 0.68 }, { from: 41, rate: 0.32 }, { from: 51, rate: 0.265 }, { from: 61, rate: 0.265 }],
         attack:  [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.76 }, { from: 31, rate: 0.68 }, { from: 41, rate: 0.60 }, { from: 51, rate: 0.85 }, { from: 61, rate: 0.77 }],
@@ -356,7 +378,12 @@
         // RC-1・作者の指定。坑道の敵は Lv4 までなので、野生のコケネズミは使ってこない
         { level: 14, skill: "cure" },
         { level: 22, skill: "doubleSlash" },
-        { level: 28, skill: "fightSong" }
+        { level: 25, skill: "rockSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
+        { level: 26, skill: "quickStrike" },
+        { level: 28, skill: "fightSong" },
+        { level: 30, skill: "wildSlash" },
+        { level: 38, skill: "earthSlash" },
+        { level: 50, skill: "overdrive" }
       ],
       abilities: ["guts"],
       expReward: 11,
@@ -391,7 +418,7 @@
       statusResist: { poison: 10, paralysis: 0, sleep: 0, seal: 5,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.32 }, { from: 31, rate: 0.32 }, { from: 41, rate: 0.325 }, { from: 51, rate: 0.375 }, { from: 61, rate: 0.375 }],
         attack:  [{ from: 1, rate: 0.15 }, { from: 25, rate: 0.41 }, { from: 31, rate: 0.43 }, { from: 41, rate: 0.54 }, { from: 51, rate: 0.61 }, { from: 61, rate: 0.64 }],
@@ -413,9 +440,12 @@
         { level: 1, skill: "tackle" },
         { level: 5, skill: "rockThrow" },
         { level: 18, skill: "rockSpike" },
-        { level: 25, skill: "wardSongEarth" },
+        { level: 23, skill: "guardAlly" },
         { level: 27, skill: "guardSong" },
-        { level: 30, skill: "fortressForm" }
+        { level: 30, skill: "fortressForm" },
+        { level: 34, skill: "protection" },
+        { level: 44, skill: "steadyBolero" },
+        { level: 50, skill: "aegis" }
       ],
       abilities: ["earthPower"],
       expReward: 12,
@@ -458,13 +488,14 @@
                       blind: 0, curse: 0, instantDeath: 3 },
       // 深層のヨミリュウへの答えを担うので、坑道の雑魚だが上限は高くしてある
       maxLevel: 80,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 84/41/15/45/32・Lv30 129/61/25/75/59・Lv40 219/100/55/125/119・Lv50 308/162/95/155/238・Lv60 380/202/134/202/337・Lv80 515/323/190/305/479（HP/攻/防/速/PP）に
       //   ちょうどなるよう、攻撃・防御・素早さ・PP の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       growthRate: {
         hp:      [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.50 }, { from: 50, rate: 0.40 }, { from: 71, rate: 0.35 }],
         // Lv51 から +0.18（2026-10-20 作者の判断。上限で攻撃300。前は 61:0.18・75:1.50 で256）
-        attack:  [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.50 }, { from: 40, rate: 0.40 }, { from: 41, rate: 0.77 }, { from: 51, rate: 0.50 }, { from: 61, rate: 0.76 }],
+        // v1.8.0（2026-11-25 作者の指定「本当に少しだけ下げて」）：Lv41 の 0.77 → 0.75。Lv50 162 → 160（能力値の線 160 に収めた）・Lv60 200・Lv80 322
+        attack:  [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.50 }, { from: 40, rate: 0.40 }, { from: 41, rate: 0.75 }, { from: 51, rate: 0.50 }, { from: 61, rate: 0.76 }],
         defense: [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.65 }, { from: 31, rate: 0.99 }, { from: 41, rate: 1.32 }, { from: 61, rate: 0.93 }],
         speed:   [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.50 }, { from: 26, rate: 0.76 }, { from: 31, rate: 0.62 }, { from: 41, rate: 0.38 }, { from: 51, rate: 0.59 }, { from: 61, rate: 0.64 }],
         pp:      [{ from: 1, rate: 0.15 }, { from: 25, rate: 0.90 }, { from: 40, rate: 1.98 }, { from: 51, rate: 1.65 }, { from: 61, rate: 1.184 }]
@@ -489,7 +520,14 @@
         { level: 17, skill: "glare" },
         { level: 22, skill: "galeSong" },
         { level: 24, skill: "fightSong" },
-        { level: 25, skill: "wakeSong" }
+        { level: 25, skill: "wakeSong" },
+        { level: 32, skill: "heatHaze" },
+        { level: 35, skill: "prism" },
+        { level: 36, skill: "quickle" },
+        { level: 36, skill: "warCry" },
+        { level: 45, skill: "holySlash" },
+        { level: 45, skill: "reflect" },  // 1.8.0 作者の指定（2026-11-27）
+        { level: 49, skill: "saintNova" }
       ],
       abilities: ["glowing"],
       expReward: 14,
@@ -527,7 +565,7 @@
       statusResist: { poison: 10, paralysis: 0, sleep: 0, seal: 0,
                       blind: 0, curse: 2, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.15 }, { from: 25, rate: 0.20 }, { from: 40, rate: 0.30 }, { from: 50, rate: 0.45 }, { from: 61, rate: 0.88 }],
         // Lv51 から +0.23（2026-10-20 作者の判断。上限で攻撃320。前は 50:0.60 のままで270）
@@ -548,7 +586,11 @@
         { level: 1, skill: "tackle" },
         { level: 5, skill: "darkSpore" },
         { level: 18, skill: "darkNebula" },
-        { level: 28, skill: "sealSong" }
+        { level: 28, skill: "sealSong" },
+        { level: 34, skill: "abyss" },
+        { level: 36, skill: "hush" },
+        { level: 52, skill: "netherBreath" },
+        { level: 56, skill: "resurrection" }
       ],
       abilities: ["wildInstinct"],
       expReward: 16,
@@ -588,13 +630,13 @@
       resistances: { earth: 5, water: 2, fire: -2, light: -2 },
       immunities: [],
       // 石の体なので毒・麻痺・眠りが通らない。主なので即死にも強い
-      //   ※ 主として立ちはだかっているあいだは即死・封印・盲目が効かず（data/battle.js）、
-      //     毒も bosses.js で無効にしてある。この値が効くのは、スカウトして仲間にしたあと
+      //   ※ 主として立ちはだかっているあいだは即死が効かず（data/battle.js）、
+      //     ほかは bosses.js の主ごとの値を使う（v1.8.0）。この値が効くのは、スカウトして仲間にしたあと
       statusResist: { poison: 8, paralysis: 7, sleep: 8, seal: 0,
                       blind: 7, curse: 0, instantDeath: 9 },
       maxLevel: 70,
       // 守りとHPが伸び、足は止まったまま。ヒビイワ（構造体の在来種）の上位版という形
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.17 }, { from: 25, rate: 0.125 }, { from: 31, rate: 0.14 }, { from: 41, rate: 0.28 }, { from: 51, rate: 0.312 }, { from: 61, rate: 0.625 }],
         attack:  [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.45 }, { from: 31, rate: 0.46 }, { from: 41, rate: 0.55 }, { from: 51, rate: 0.55 }, { from: 61, rate: 0.57 }],
@@ -619,8 +661,13 @@
         { level: 5, skill: "rockThrow" },
         { level: 18, skill: "rockSpike" },
         { level: 23, skill: "chargeUp" },
+        { level: 25, skill: "rockSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
         { level: 26, skill: "armorBreak" },
-        { level: 27, skill: "guardSong" }
+        { level: 27, skill: "guardSong" },
+        { level: 38, skill: "earthSlash" },
+        { level: 46, skill: "allOutSlash" },
+        { level: 48, skill: "steadyBolero" },
+        { level: 52, skill: "earthCollapse" }
       ],
       abilities: ["thickSkin"],
       expReward: 90,
@@ -666,7 +713,7 @@
                       blind: 9, curse: 0, instantDeath: 6 },
       maxLevel: 70,
       // 攻めと速さが伸び、守りが置いていかれる。育てるほど「殴られる前に殴る」形になる
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。
       // Lv24 までは前と同じ（2026-10-20 に攻撃を Lv1〜 0.14 へ下げたまま。亀裂の主の攻撃は data/bosses.js の倍率で42）
       growthRate: {
         hp:      [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.075 }, { from: 31, rate: 0.24 }, { from: 41, rate: 0.205 }, { from: 51, rate: 0.205 }, { from: 61, rate: 0.205 }],
@@ -698,7 +745,14 @@
         { level: 18, skill: "flame" },
         { level: 22, skill: "intimidRoar" },
         { level: 24, skill: "doubleSlash" },
-        { level: 26, skill: "powerResonance" }
+        { level: 25, skill: "flameSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
+        { level: 26, skill: "powerResonance" },
+        { level: 28, skill: "quickStrike" },
+        { level: 35, skill: "blaze" },
+        { level: 35, skill: "scorchBreath" },
+        { level: 38, skill: "crimsonSlash" },
+        { level: 52, skill: "inferno" },
+        { level: 52, skill: "scorchingHell" }
       ],
       abilities: ["fireSoul"],
       expReward: 115,
@@ -744,7 +798,7 @@
       maxLevel: 85,
       // 王らしくHPと守りに寄せ、足は捨てる。
       // 立ちはだかるときの強さは data/bosses.js の statMultiplier で足す
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.19 }, { from: 25, rate: 0.25 }, { from: 45, rate: 0.37 }, { from: 55, rate: 0.60 }, { from: 61, rate: 0.15 }, { from: 80, rate: 1.05 }],
         // Lv51 から +0.18（2026-10-20 作者の判断。上限で攻撃319。前は 55:0.65・61:0.30 で256）
@@ -773,10 +827,14 @@
         { level: 8, skill: "aqua" },
         // 主としてのローテーション（data/bosses.js）には入れていない。仲間にして育てると覚える
         { level: 18, skill: "wave" },
-        { level: 23, skill: "wardSongWater" },
         { level: 25, skill: "rallyDance" },
         { level: 28, skill: "fortressForm" },
-        { level: 36, skill: "cureAll" }
+        { level: 32, skill: "whirlpool" },
+        { level: 36, skill: "cureAll" },
+        { level: 36, skill: "warCry" },
+        { level: 37, skill: "torrent" },
+        { level: 44, skill: "reversal" },  // 1.8.0 作者の指定（2026-11-27）
+        { level: 50, skill: "curarisAll" }
       ],
       abilities: ["kingsDignity"],
       expReward: 80,
@@ -826,7 +884,7 @@
                       blind: 10, curse: 0, instantDeath: 0 },
       maxLevel: 70,
       // 素早さだけ突出させる。そのぶん打たれ弱い
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 62/48/11/60/22・Lv30 89/67/15/83/32・Lv40 120/110/23/139/55・Lv50 179/150/36/194/106・Lv60 225/233/51/264/166・Lv70 304/356/59/349/191（HP/攻/防/速/PP）に
       //   ちょうどなるよう、HP・攻撃・素早さ の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       //   そのあと作者の指定（11-13）：攻撃は Lv61 からを下げて Lv70 330（Lv60 までは表のまま）。
@@ -861,10 +919,15 @@
         { level: 22, skill: "wakeSong" },
         // 幻惑の息：灰をまとって舞う（作者の指定 2026-11-21。図鑑の説明に合う技・覚えるレベルはほかの種族の ±2）。ドロガメ22・ヨドミ25
         { level: 23, skill: "dazzleMist" },
+        { level: 23, skill: "slow" },
         { level: 24, skill: "galeSong" },
-        { level: 25, skill: "wardSongWind" },
-        { level: 30, skill: "wardSongFire" },
-        { level: 36, skill: "cureAll" }
+        { level: 28, skill: "elementBarrier" },  // 1.8.0 作者の仕様（2026-11-26）：〇〇ベールをなくし、エレメントバリアに
+        { level: 32, skill: "heatHaze" },
+        { level: 34, skill: "cyclone" },
+        { level: 34, skill: "quickle" },
+        { level: 36, skill: "cureAll" },
+        { level: 37, skill: "gravity" },
+        { level: 50, skill: "bladeStorm" }
       ],
       abilities: ["windFlow"],
       expReward: 15,
@@ -909,7 +972,7 @@
       statusResist: { poison: 10, paralysis: 0, sleep: 0, seal: 5,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.23 }, { from: 31, rate: 0.245 }, { from: 41, rate: 0.363 }, { from: 51, rate: 0.365 }, { from: 61, rate: 0.363 }],
         attack:  [{ from: 1, rate: 0.15 }, { from: 25, rate: 0.29 }, { from: 31, rate: 0.27 }, { from: 41, rate: 0.38 }, { from: 51, rate: 0.62 }, { from: 61, rate: 0.63 }],
@@ -931,7 +994,10 @@
         { level: 5, skill: "rockThrow" },
         { level: 18, skill: "rockSpike" },
         { level: 24, skill: "recklessTackle" },
-        { level: 28, skill: "wardSongEarth" }
+        { level: 35, skill: "refresh" },
+        { level: 48, skill: "aegis" },
+        { level: 49, skill: "allOutSlash" },
+        { level: 50, skill: "earthCollapse" }
       ],
       abilities: ["brittleShell"],
       // 硬くて時間がかかるぶんゴールドは多いが、経験値は控えめ。
@@ -974,7 +1040,7 @@
       statusResist: { poison: 0, paralysis: 5, sleep: 5, seal: 0,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       // 防御は、特性・絆・加護が重なるとほぼ無敵になるので伸ばしすぎない（2026-09-29 作者。Lv70 で素の防御314）
       growthRate: {
         hp:      [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.24 }, { from: 31, rate: 0.25 }, { from: 41, rate: 0.325 }, { from: 51, rate: 0.24 }, { from: 61, rate: 0.297 }],
@@ -1000,8 +1066,13 @@
         { level: 7, skill: "ember" },
         { level: 18, skill: "flame" },
         { level: 22, skill: "chargeUp" },
+        { level: 24, skill: "flameSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
         { level: 25, skill: "armorBreak" },
-        { level: 28, skill: "wardSongFire" }
+        { level: 33, skill: "criticalSlash" },
+        { level: 36, skill: "sweepSlash" },
+        { level: 38, skill: "crimsonSlash" },
+        { level: 41, skill: "swordDance" },
+        { level: 46, skill: "allOutSlash" }
       ],
       abilities: ["hardShell"],
       // 硬くて時間がかかるわりに実入りは薄い。稼ぎ相手はヒビイワのほう
@@ -1051,7 +1122,7 @@
       statusResist: { poison: 0, paralysis: 0, sleep: 0, seal: 0,
                       blind: 0, curse: 2, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.13 }, { from: 25, rate: 0.58 }, { from: 31, rate: 0.57 }, { from: 41, rate: 0.41 }, { from: 51, rate: 0.375 }, { from: 61, rate: 0.37 }],
         attack:  [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.47 }, { from: 31, rate: 0.49 }, { from: 41, rate: 0.68 }, { from: 51, rate: 1.32 }, { from: 61, rate: 1.54 }],
@@ -1075,7 +1146,11 @@
         { level: 3, skill: "ember" },
         { level: 18, skill: "flame" },
         { level: 22, skill: "recklessTackle" },
-        { level: 30, skill: "rallyDance" }
+        { level: 30, skill: "rallyDance" },
+        { level: 32, skill: "scorchBreath" },
+        { level: 34, skill: "blaze" },
+        { level: 40, skill: "warCry" },
+        { level: 48, skill: "inferno" }
       ],
       abilities: ["firstStrike"],
       expReward: 12,
@@ -1115,7 +1190,7 @@
                       blind: 5, curse: 0, instantDeath: 5 },
       // 上限99の3種のうちの1体。序盤で捕まえても最後まで通用する
       maxLevel: 99,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.25 }, { from: 40, rate: 0.40 }, { from: 50, rate: 0.45 }, { from: 71, rate: 0.40 }],
         attack:  [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.40 }, { from: 40, rate: 0.65 }, { from: 50, rate: 1.10 }, { from: 61, rate: 0.70 }],
@@ -1139,9 +1214,17 @@
         // 噛みつく：近づくと牙をむく（作者の指定 2026-11-21。図鑑の説明に合う技・覚えるレベルはほかの種族の ±2）。ドクバチ12。野生（亀裂は Lv10 まで）は使わない
         { level: 12, skill: "bite" },
         { level: 18, skill: "flame" },
+        { level: 24, skill: "flameSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
         { level: 25, skill: "armorBreak" },
         { level: 27, skill: "doubleSlash" },
-        { level: 28, skill: "powerResonance" }
+        { level: 28, skill: "powerResonance" },
+        { level: 32, skill: "wildSlash" },
+        { level: 34, skill: "swordDance" },
+        { level: 35, skill: "blaze" },
+        { level: 38, skill: "crimsonSlash" },
+        { level: 40, skill: "heatHaze" },
+        { level: 48, skill: "hustleDance" },
+        { level: 60, skill: "overdrive" }
       ],
       abilities: ["fireSoul"],
       expReward: 15,
@@ -1189,7 +1272,7 @@
       statusResist: { poison: 0, paralysis: 0, sleep: 2, seal: 0,
                       blind: 0, curse: 4, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 87/40/23/31/16・Lv30 123/62/40/55/29・Lv40 198/99/81/91/53・Lv50 294/149/114/122/93・Lv60 352/198/164/159/135・Lv70 464/266/200/208/199（HP/攻/防/速/PP）に
       //   ちょうどなるよう、HP・攻撃・防御・素早さ・PP の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       growthRate: {
@@ -1215,8 +1298,13 @@
         // RC-1・作者の指定。深層の敵は Lv15 までなので、野生のヨドミは使ってこない
         { level: 19, skill: "cleanse" },
         { level: 24, skill: "slowDance" },
+        { level: 24, skill: "slow" },
         { level: 25, skill: "dazzleMist" },
-        { level: 27, skill: "curseSong" }
+        { level: 27, skill: "curseSong" },
+        { level: 32, skill: "deepBreath" },
+        { level: 36, skill: "gravity" },
+        { level: 36, skill: "hush" },
+        { level: 42, skill: "reversal" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       abilities: ["soulDrain"],
       expReward: 17,
@@ -1265,7 +1353,7 @@
       statusResist: { poison: 0, paralysis: 0, sleep: 10, seal: 0,
                       blind: 7, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.17 }, { from: 25, rate: 0.26 }, { from: 31, rate: 0.28 }, { from: 41, rate: 0.475 }, { from: 51, rate: 0.62 }, { from: 61, rate: 0.52 }],
         attack:  [{ from: 1, rate: 0.12 }, { from: 25, rate: 0.19 }, { from: 31, rate: 0.20 }, { from: 41, rate: 0.36 }, { from: 51, rate: 0.60 }, { from: 61, rate: 0.58 }],
@@ -1297,8 +1385,14 @@
         { level: 22, skill: "slowDance" },
         { level: 28, skill: "purifyRain" },
         { level: 30, skill: "greaterCure" },
+        { level: 30, skill: "refresh" },
         { level: 33, skill: "resurrect" },
-        { level: 36, skill: "cureAll" }
+        { level: 36, skill: "cureAll" },
+        { level: 38, skill: "abyss" },
+        { level: 38, skill: "curaris" },
+        { level: 44, skill: "resurrection" },
+        { level: 47, skill: "reflect" },  // 1.8.0 作者の指定（2026-11-27）
+        { level: 48, skill: "grandNebula" }
       ],
       abilities: ["regen"],
       expReward: 22,
@@ -1350,7 +1444,7 @@
                       blind: 0, curse: 0, instantDeath: 0 },
       // 仲間にする価値を持たせたいので、上限は高めにしてある
       maxLevel: 70,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 64/41/16/59/24・Lv30 84/52/21/81/43・Lv40 148/87/42/118/86・Lv50 240/128/87/170/178・Lv60 341/243/102/229/289・Lv70 399/330/134/319/354（HP/攻/防/速/PP）に
       //   ちょうどなるよう、HP・攻撃・防御・素早さ の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       //   そのあと作者の指定（11-13）：攻撃を Lv51 から少し下げて Lv60 236・Lv70 318（Lv50 までは表のまま）
@@ -1379,8 +1473,10 @@
         { level: 20, skill: "volt" },
         { level: 23, skill: "numbNeedle" },
         { level: 24, skill: "numbPowder" },
+        { level: 24, skill: "slow" },
         { level: 26, skill: "powerResonance" },
-        { level: 28, skill: "wardSongThunder" }
+        { level: 40, skill: "plasma" },
+        { level: 56, skill: "judgment" }
       ],
       abilities: ["discharge"],
       expReward: 25,
@@ -1430,7 +1526,7 @@
       statusResist: { poison: 3, paralysis: 10, sleep: 0, seal: 0,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 80,   // v1.4.2：70 → 80（作者の指定）
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       // v1.4.2（2026-11-13 作者の表）：個体値0・素直で Lv25 87/59/22/17/17・Lv30 111/77/30/22/23・Lv40 162/113/46/31/36・Lv50 242/152/69/43/73・Lv60 322/245/94/59/117・Lv70 394/319/139/93/157・Lv80 474/359/199/167/199（HP/攻/防/速/PP）に
       //   ちょうどなるよう、HP・攻撃・防御・素早さ・PP の成長率を逆算した。Lv25 で違う能力は Lv22 から変えた（第一章の Lv21 までは前のまま）
       growthRate: {
@@ -1460,7 +1556,11 @@
         { level: 14, skill: "bodyPress" },
         { level: 18, skill: "wave" },
         { level: 23, skill: "recklessTackle" },
-        { level: 24, skill: "armorBreak" }
+        { level: 24, skill: "armorBreak" },
+        { level: 26, skill: "flowSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
+        { level: 36, skill: "burstFist" },
+        { level: 38, skill: "torrentSlash" },
+        { level: 47, skill: "allOutSlash" }
       ],
       abilities: ["waterHeart"],
       expReward: 20,
@@ -1551,7 +1651,10 @@
         // 出現下限がLv10なので、出会う個体は必ず持っている
         { level: 10, skill: "abyssBreath" },
         { level: 22, skill: "intimidRoar" },
-        { level: 26, skill: "chargeUp" }
+        { level: 26, skill: "chargeUp" },
+        { level: 32, skill: "deepBreath" },
+        { level: 40, skill: "darkShadowSlash" },
+        { level: 50, skill: "netherBreath" }
       ],
       abilities: ["duskborn"],
       expReward: 40,
@@ -1640,7 +1743,7 @@
       statusResist: { poison: 10, paralysis: 0, sleep: 0, seal: 2,
                       blind: 2, curse: 6, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.13 }, { from: 25, rate: 0.32 }, { from: 31, rate: 0.335 }, { from: 41, rate: 0.455 }, { from: 51, rate: 0.51 }, { from: 61, rate: 0.265 }],
         attack:  [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.57 }, { from: 31, rate: 0.59 }, { from: 41, rate: 0.32 }, { from: 51, rate: 0.92 }, { from: 61, rate: 0.65 }],
@@ -1664,7 +1767,11 @@
         { level: 4, skill: "venomSting" },
         { level: 12, skill: "bite" },
         { level: 22, skill: "numbNeedle" },
-        { level: 25, skill: "doubleSlash" }
+        { level: 25, skill: "doubleSlash" },
+        { level: 28, skill: "quickStrike" },
+        { level: 30, skill: "wildSlash" },
+        { level: 37, skill: "quickle" },
+        { level: 44, skill: "cometSamba" }
       ],
       abilities: ["poisonThorn"],
       expReward: 28,
@@ -1709,7 +1816,7 @@
       statusResist: { poison: 8, paralysis: 0, sleep: 0, seal: 5,
                       blind: 5, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.29 }, { from: 31, rate: 0.305 }, { from: 41, rate: 0.43 }, { from: 51, rate: 0.43 }, { from: 61, rate: 0.335 }],
         attack:  [{ from: 1, rate: 0.13 }, { from: 25, rate: 0.24 }, { from: 31, rate: 0.27 }, { from: 41, rate: 0.35 }, { from: 51, rate: 0.35 }, { from: 61, rate: 0.35 }],
@@ -1730,7 +1837,10 @@
         { level: 1, skill: "tackle" },
         { level: 10, skill: "venomBreath" },
         { level: 22, skill: "dazzleMist" },
-        { level: 28, skill: "guardSong" }
+        { level: 26, skill: "guardAlly" },
+        { level: 28, skill: "guardSong" },
+        { level: 36, skill: "protection" },
+        { level: 50, skill: "aegis" }
       ],
       abilities: ["hardShell"],
       expReward: 32,
@@ -1773,7 +1883,7 @@
       statusResist: { poison: 8, paralysis: 0, sleep: 0, seal: 0,
                       blind: 0, curse: 5, instantDeath: 10 },
       maxLevel: 70,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.20 }, { from: 40, rate: 0.30 }, { from: 55, rate: 0.40 }, { from: 65, rate: 0.30 }],
         // Lv51 から +0.37（2026-10-20 作者の判断。上限で攻撃300。前は 54:0.88・61:0.35 で219）
@@ -1797,7 +1907,12 @@
         // 毒沼の敵は Lv19 までなので、野生のヌマボネは使ってこない（仲間にして育てると覚える）
         { level: 20, skill: "darkNebula" },
         { level: 24, skill: "sealSong" },
-        { level: 26, skill: "curseSong" }
+        { level: 24, skill: "crack" },
+        { level: 26, skill: "curseSong" },
+        { level: 34, skill: "hush" },
+        { level: 36, skill: "collapse" },
+        { level: 49, skill: "shatterArmor" },
+        { level: 50, skill: "resurrect" }
       ],
       abilities: ["undeadSoul"],
       expReward: 36,
@@ -1848,7 +1963,7 @@
       statusResist: { poison: 10, paralysis: 0, sleep: 0, seal: 10,
                       blind: 0, curse: 0, instantDeath: 9 },
       maxLevel: 80,
-      // 成長率の段階（α-10・作者が決めたもの。早見表/成長率の段階.txt）。Lv24 までは α-9 と同じ
+      // 成長率の段階（α-10・作者が決めたもの。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは α-9 と同じ
       growthRate: {
         // HP は 2026-11-03 に下げた（作者「HP役のまま、2位との差を約5%に」）。Lv30 200・Lv50 380・Lv70 610・Lv80 690 にちょうどなる値。
         // 区切りはそのまま。Lv24 までは変えていないので、主のとき（Lv21）の HP531 は変わらない
@@ -1865,7 +1980,7 @@
       baseDefense: 8,
       baseSpeed: 5,
       basePp: 7,
-      scoutRate: 0.12,
+      scoutRate: 0.025,   // 主は 2.5%（作者の指定 2026-11-27）
       // 主なので、ふつうの遭遇には出ない
       spawnRate: 0,
       learnset: [
@@ -1874,7 +1989,11 @@
         { level: 6, skill: "bubble" },
         { level: 8, skill: "venomBreath" },
         { level: 14, skill: "bite" },
-        { level: 24, skill: "intimidRoar" }
+        { level: 24, skill: "intimidRoar" },
+        { level: 26, skill: "flowSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
+        { level: 32, skill: "whirlpool" },
+        { level: 36, skill: "burstFist" },
+        { level: 50, skill: "tidalBreath" }
       ],
       abilities: ["thickSkin"],
       expReward: 140,
@@ -1924,7 +2043,7 @@
       statusResist: { poison: 0, paralysis: 0, sleep: 0, seal: 0,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.17 }, { from: 25, rate: 0.33 }, { from: 31, rate: 0.41 }, { from: 41, rate: 0.43 }, { from: 51, rate: 0.34 }, { from: 61, rate: 0.59 }],
         attack:  [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.45 }, { from: 31, rate: 0.47 }, { from: 41, rate: 0.78 }, { from: 51, rate: 0.75 }, { from: 61, rate: 0.52 }],
@@ -1956,7 +2075,11 @@
         { level: 7,  skill: "rockThrow" },
         { level: 12, skill: "harden" },
         { level: 18, skill: "rockSpike" },
-        { level: 24, skill: "fortressForm" }
+        { level: 24, skill: "fortressForm" },
+        { level: 24, skill: "guardAlly" },
+        { level: 24, skill: "slow" },
+        { level: 33, skill: "gravity" },
+        { level: 44, skill: "steadyBolero" }
       ],
       enemySkills: [
         { level: 1, skill: "rockSpike" }
@@ -1993,7 +2116,7 @@
       statusResist: { poison: 0, paralysis: 0, sleep: 7, seal: 3,
                       blind: 0, curse: 0, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       // v1.4.2（2026-11-13 作者の指定「全体的に HP を上げる」）：HP の成長率を Lv1 からぜんぶ 1.2 倍（Lv30 130→153・Lv50 251→298・Lv70 389→463）
       growthRate: {
         hp:      [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.564 }, { from: 31, rate: 0.408 }, { from: 41, rate: 0.396 }, { from: 51, rate: 0.462 }, { from: 61, rate: 0.456 }],
@@ -2030,8 +2153,14 @@
         { level: 23, skill: "shine" },
         { level: 24, skill: "wakeSong" },
         { level: 28, skill: "greaterCure" },
+        { level: 32, skill: "sharePp" },
         { level: 33, skill: "resurrect" },
-        { level: 35, skill: "cureAll" }
+        { level: 34, skill: "refresh" },
+        { level: 35, skill: "cureAll" },
+        { level: 38, skill: "curaris" },
+        { level: 44, skill: "resurrection" },
+        { level: 45, skill: "reversal" },  // 1.8.0 作者の指定（2026-11-27）
+        { level: 54, skill: "curarisAll" }
       ],
       enemySkills: [
         { level: 1, skill: "glimmer" },
@@ -2111,7 +2240,11 @@
         { level: 22, skill: "doubleSlash" },
         // ヘイスト：追い風に乗って飛ぶ（作者の指定 2026-11-21。図鑑の説明に合う技・覚えるレベルはほかの種族の ±2）。ジュエル23。野生は enemySkills なので使わない
         { level: 23, skill: "galeSong" },
-        { level: 25, skill: "wardSongWind" }
+        { level: 26, skill: "galeSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
+        { level: 34, skill: "quickle" },
+        { level: 38, skill: "whirlSlash" },
+        { level: 48, skill: "tempest" },
+        { level: 50, skill: "accel" }
       ],
       enemySkills: [
         { level: 1, skill: "gust" },
@@ -2146,7 +2279,7 @@
       statusResist: { poison: 5, paralysis: 0, sleep: 0, seal: 0,
                       blind: 0, curse: 3, instantDeath: 0 },
       maxLevel: 70,
-      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/成長率の段階.txt）。Lv24 までは前と同じ
+      // 成長率の段階（作者が決めたもの。2026-10-28 上限70に合わせて Lv25 から先を作り直した。早見表/能力値と成長.txt の「成長率の段階」）。Lv24 までは前と同じ
       growthRate: {
         hp:      [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.38 }, { from: 31, rate: 0.35 }, { from: 41, rate: 0.47 }, { from: 51, rate: 0.455 }, { from: 61, rate: 0.455 }],
         attack:  [{ from: 1, rate: 0.15 }, { from: 25, rate: 0.44 }, { from: 31, rate: 0.41 }, { from: 41, rate: 0.35 }, { from: 51, rate: 0.40 }, { from: 61, rate: 0.39 }],
@@ -2181,8 +2314,11 @@
         { level: 13, skill: "bubble" },
         { level: 18, skill: "wave" },
         { level: 20, skill: "cleanse" },
-        { level: 25, skill: "wardSongWater" },
-        { level: 27, skill: "purifyRain" }
+        { level: 26, skill: "guardAlly" },
+        { level: 27, skill: "purifyRain" },
+        { level: 32, skill: "whirlpool" },
+        { level: 49, skill: "aegis" },
+        { level: 55, skill: "tidalBreath" }
       ],
       enemySkills: [
         { level: 1, skill: "wave" },
@@ -2256,8 +2392,15 @@
         { level: 15, skill: "shine" },
         { level: 17, skill: "glare" },
         { level: 22, skill: "wakeSong" },
+        { level: 23, skill: "crack" },
         { level: 28, skill: "greaterCure" },
-        { level: 30, skill: "wardSongLight" }
+        { level: 28, skill: "elementBarrier" },  // 1.8.0 作者の仕様（2026-11-26）：〇〇ベールをなくし、エレメントバリアに
+        { level: 30, skill: "refresh" },
+        { level: 32, skill: "heatHaze" },
+        { level: 36, skill: "collapse" },
+        { level: 36, skill: "prism" },
+        { level: 40, skill: "curaris" },
+        { level: 43, skill: "reflect" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       enemySkills: [
         { level: 1, skill: "shine" },
@@ -2324,7 +2467,7 @@
       baseDefense: 7,
       baseSpeed: 7,
       basePp: 7,
-      scoutRate: 0.12,
+      scoutRate: 0.025,   // 主は 2.5%（作者の指定 2026-11-27）
       // 主なので、ふつうの遭遇には出ない
       spawnRate: 0,
       // 仲間になってから覚える技（作者が決めたもの。2026-10-08）。仲間にするとLv1から育て直し。
@@ -2336,7 +2479,13 @@
         { level: 18, skill: "rootSpike" },
         { level: 18, skill: "rockSpike" },
         { level: 22, skill: "mysteryDance" },
-        { level: 26, skill: "sleepBreath" }
+        { level: 26, skill: "sleepBreath" },
+        { level: 30, skill: "refresh" },
+        { level: 34, skill: "rockBurst" },
+        { level: 40, skill: "curaris" },
+        { level: 48, skill: "terraBurst" },
+        { level: 50, skill: "bind" },
+        { level: 55, skill: "resurrection" }
       ],
       // 主として出たときの行動は data/bosses.js の hollowLord の手順。手順を持たない出方をしたとき用に、同じ技を並べておく
       enemySkills: [
@@ -2377,7 +2526,7 @@
      * ★ 仲間にしたときの値は作者が決めた（2026-11-03）：
      *   能力値の目標（個体値0・素直）Lv30 170/62/71/27/35・Lv50 354/132/140/53/76・
      *   Lv70 544/263/246/76/121・Lv80 622/311/290/99/152（HP/攻/防/速/PP）。成長率はこの値にちょうどなるよう逆算した（PP は v1.4.2 で Lv40 から伸び2倍にしたので、Lv50 から上はこれより高い）。
-     *   耐性 雷6・風3・地−4・火−2／状態異常 毒10・麻痺8・呪い8・即死3（v1.4.1 で 5 → 3）／特性 放電／覚える技／勧誘率 0.12／
+     *   耐性 雷6・風3・地−4・火−2／状態異常 毒10・麻痺8・呪い8・即死3（v1.4.1 で 5 → 3）／特性 放電／覚える技／勧誘率（2026-11-27 に作者の指定で 0.12 → 0.025）／
      *   絆の報酬 地+2・火+2・防御×1.1・攻撃×1.05。
      *   図鑑の説明と記録は作者が確定（2026-11-11。信頼の記録は作者の文）。経験値・ゴールドは私の案を作者がそのまま確定（2026-11-11）
      */
@@ -2389,7 +2538,7 @@
       // 雷と風に強く、地と火に弱い（地の弱点はここが最初の主）
       resistances: { thunder: 6, wind: 3, earth: -4, fire: -2 },
       immunities: [],
-      // 機械なので毒と麻痺に強い（毒10は効かない。主のあいだは data/bosses.js の immuneToStatus で麻痺も効かない）
+      // 機械なので毒と麻痺に強い（毒10は効かない。主のあいだは data/bosses.js の immuneToStatus で毒・麻痺が効かない）
       statusResist: { poison: 10, paralysis: 8, sleep: 0, seal: 0,
                       blind: 0, curse: 8, instantDeath: 3 },
       maxLevel: 80,
@@ -2418,7 +2567,7 @@
       baseDefense: 9,
       baseSpeed: 6,
       basePp: 7,
-      scoutRate: 0.12,
+      scoutRate: 0.025,   // 主は 2.5%（作者の指定 2026-11-27）
       // 主なので、ふつうの遭遇には出ない
       spawnRate: 0,
       // 仲間になってから覚える技（作者が決めた。2026-11-03）。主のときの技（専用の歯車投げも）を覚えていく
@@ -2431,8 +2580,15 @@
         { level: 22, skill: "lightning" },
         { level: 23, skill: "armorBreak" },
         { level: 24, skill: "chargeUp" },
+        { level: 25, skill: "thunderSlash" },  // 1.8.0 作者の指定（2026-11-24）：斬りの技を覚える種族を増やした
         { level: 26, skill: "numbPowder" },
-        { level: 27, skill: "rallyDance" }
+        { level: 27, skill: "rallyDance" },
+        { level: 35, skill: "burstFist" },
+        { level: 35, skill: "swordDance" },
+        { level: 40, skill: "plasma" },
+        { level: 44, skill: "raijinSlash" },
+        { level: 54, skill: "judgment" },
+        { level: 60, skill: "duskWind" }
       ],
       // 主として出たときの行動は data/bosses.js の rootsWarden の手順。手順を持たない出方をしたとき用に、同じ技を並べておく
       enemySkills: [
@@ -2520,9 +2676,13 @@
         { level: 5,  skill: "rockThrow" },
         { level: 18, skill: "rockSpike" },
         { level: 24, skill: "guardSong" },
+        { level: 24, skill: "slow" },
         { level: 25, skill: "numbPowder" },
         { level: 27, skill: "wakeSong" },
-        { level: 28, skill: "fortressForm" }
+        { level: 28, skill: "fortressForm" },
+        { level: 34, skill: "rockBurst" },
+        { level: 40, skill: "hustleDance" },
+        { level: 42, skill: "deathDance" }
       ],
       abilities: ["gamble"],
       // 仮：若葉の洞の5種と同じくらい
@@ -2675,9 +2835,14 @@
         { level: 25, skill: "death" },
         { level: 26, skill: "sealSong" },
         { level: 28, skill: "wakeSong" },
+        { level: 28, skill: "sweepSlash" },
         { level: 30, skill: "vacuumWave" },
+        { level: 36, skill: "gravity" },
+        { level: 36, skill: "hush" },
+        { level: 38, skill: "quickle" },
         // デスラ（2026-11-18 作者の指定。v1.5.0）
-        { level: 40, skill: "deathra" }
+        { level: 40, skill: "deathra" },
+        { level: 42, skill: "reflect" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       abilities: ["swiftFoot"],
       // 仮：コケキノコと同じくらい
@@ -2760,7 +2925,11 @@
         { level: 22, skill: "thunderSlash" },
         { level: 24, skill: "doubleSlash" },
         { level: 26, skill: "chargeUp" },
-        { level: 27, skill: "lightning" }
+        { level: 27, skill: "lightning" },
+        { level: 34, skill: "swordDance" },
+        { level: 42, skill: "raijinSlash" },
+        { level: 50, skill: "allOutSlash" },
+        { level: 58, skill: "thunderHeaven" }
       ],
       abilities: ["charged"],
       // 作者が確定（ツリガネ 38 / 14 より少し上）
@@ -2849,7 +3018,13 @@
         { level: 24, skill: "flowSlash" },
         { level: 25, skill: "galeSlash" },
         { level: 26, skill: "doubleSlash" },
-        { level: 30, skill: "rallyDance" }
+        { level: 27, skill: "lightSlash" },
+        { level: 28, skill: "shadowSlash" },
+        { level: 28, skill: "sweepSlash" },
+        { level: 30, skill: "rallyDance" },
+        { level: 30, skill: "wildSlash" },
+        { level: 32, skill: "criticalSlash" },
+        { level: 38, skill: "crimsonSlash" }
       ],
       abilities: ["swordMaster"],
       expReward: 48,
@@ -2915,7 +3090,9 @@
         { level: 18, skill: "rockSpike" },
         { level: 23, skill: "galeSong" },
         { level: 25, skill: "cleanse" },
-        { level: 28, skill: "wakeSong" }
+        { level: 28, skill: "wakeSong" },
+        { level: 30, skill: "refresh" },
+        { level: 42, skill: "cometSamba" }
       ],
       abilities: ["hardBody"],
       // 経験値はレベルに関係なく 3000（作者の指定。MonsterInstance.getExpReward）
@@ -2975,7 +3152,10 @@
         { level: 12, skill: "bodyPress" },
         { level: 22, skill: "guardSong" },
         { level: 24, skill: "fightSong" },
-        { level: 28, skill: "fortressForm" }
+        { level: 24, skill: "guardAlly" },
+        { level: 28, skill: "fortressForm" },
+        { level: 34, skill: "protection" },
+        { level: 50, skill: "aegis" }
       ],
       abilities: ["hardShell"],
       expReward: 46,
@@ -3046,7 +3226,11 @@
         { level: 18, skill: "wave" },
         { level: 22, skill: "slowDance" },
         { level: 26, skill: "greaterCure" },
-        { level: 28, skill: "purifyLight" }
+        { level: 28, skill: "purifyLight" },
+        { level: 30, skill: "refresh" },
+        { level: 30, skill: "sharePp" },
+        { level: 38, skill: "curaris" },
+        { level: 46, skill: "reversal" }   // 1.8.0 作者の指定（2026-11-27）
       ],
       abilities: ["stickyBody"],
       // 回復技は、仲間のHPが6割を切ってから使う（元気な相手に撃たない）
@@ -3063,6 +3247,390 @@
       motions: {
         attack: "sapBump", technique: "sapBump", resonance: "sapCast", breath: "sapCast", buff: "sapCast",
         hit: "sapHit", levelUp: "sapCheer", sleeping: "sapSleeping"
+      }
+    },
+
+    /**
+     * --- 涵養の穴・滴る鍾乳洞の在来種（v1.8.0） ---
+     * 作者の表（デスクトップの 滴る鍾乳洞_モンスター.md 2026-11-26）。図鑑の説明以外は作者が確定。
+     *   図鑑の説明と記録（records）は私の案を作者が直して確定（2026-11-26）。経験値・ゴールドは私の案（千年樹の根底の一段上。作者の見ての返事待ち）。
+     *   絆の報酬（bondReward）も作者が確定（2026-11-26）。絵と動きは私が描いた（作者の見ての返事待ち）。ウルヴァーグの絵だけは作者が描いた（同じ日）。
+     *   成長率は作者の表の Lv30・40・50・60・70（・75）の値にぴったり合うもの（作者が逆算した値）。
+     *   敵のときの技と、技を使う確率は data/dungeons.js の滴る鍾乳洞の表。
+     */
+
+    // ミズマイマイ：共鳴の使い手（遅く、柔らかいが、PPが多い）。目標 Lv30 155/44/54/35/47・Lv40 229/68/94/55/81・Lv50 336/92/151/78/127・Lv60 444/142/213/103/183・Lv70 572/193/275/145/215・Lv75 601/218/300/167/231（HP/攻/防/速/PP）
+    mizuMaimai: {
+      id: "mizuMaimai",
+      name: "ミズマイマイ",
+      family: "insectKind",
+      element: "water",
+      resistances: { water: 4, fire: 2, thunder: -3 },
+      immunities: [],
+      statusResist: { poison: 3, paralysis: 0, sleep: 0, seal: 5,
+                      blind: 0, curse: 0, instantDeath: 0 },
+      maxLevel: 75,
+      growthRate: {
+        hp:      [{ from: 1, rate: 0.164 }, { from: 25, rate: 0.33 }, { from: 31, rate: 0.321 }, { from: 41, rate: 0.465 }, { from: 51, rate: 0.47 }, { from: 61, rate: 0.56 }, { from: 71, rate: 0.25 }],
+        attack:  [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.27 }, { from: 31, rate: 0.35 }, { from: 41, rate: 0.34 }, { from: 51, rate: 0.71 }, { from: 61, rate: 0.73 }, { from: 71, rate: 0.71 }],
+        defense: [{ from: 1, rate: 0.145 }, { from: 25, rate: 0.28 }, { from: 31, rate: 0.45 }, { from: 41, rate: 0.63 }, { from: 51, rate: 0.69 }, { from: 61, rate: 0.69 }, { from: 71, rate: 0.55 }],
+        speed:   [{ from: 1, rate: 0.18 }, { from: 25, rate: 0.31 }, { from: 31, rate: 0.4 }, { from: 41, rate: 0.46 }, { from: 51, rate: 0.5 }, { from: 61, rate: 0.84 }, { from: 71, rate: 0.88 }],
+        pp:      [{ from: 1, rate: 0.147 }, { from: 25, rate: 0.25 }, { from: 31, rate: 0.43 }, { from: 41, rate: 0.57 }, { from: 51, rate: 0.7 }, { from: 61, rate: 0.4 }, { from: 71, rate: 0.4 }]
+      },
+      // 図鑑と記録は作者が確定（2026-11-26。私の案を作者が直した）
+      description: "水属性。殻の奥でいつも水の音が鳴っている巻貝。動きは遅いが、殻に溜めた水を響かせて、波や水流を何度も放つ。雷に弱い。",
+      records: {
+        used:  "殻に耳を当てると、水の音が聞こえた。遠い地底湖の波の音だという。",
+        trust: "歩くのが遅いので、抱えて運ぶことにした。腕の中で、殻を小さく鳴らしている。",
+        bond:  "眠る前に、殻の音を聞かせてくれるようになった。今夜も同じ波の音を聞いている。"
+      },
+      baseHp: 23,
+      baseAttack: 7,
+      baseDefense: 9,
+      baseSpeed: 5,
+      basePp: 8,
+      evasion: 0.05,
+      scoutRate: 0.20,
+      spawnRate: 0.45,
+      learnset: [
+        { level: 1,  skill: "tackle" },
+        { level: 5,  skill: "aqua" },
+        { level: 10, skill: "harden" },
+        { level: 18, skill: "wave" },
+        { level: 22, skill: "slow" },
+        { level: 34, skill: "torrent" },
+        { level: 40, skill: "refresh" },
+        { level: 42, skill: "reflect" },  // 1.8.0 作者の指定（2026-11-27）
+        { level: 48, skill: "maelstrom" }
+      ],
+      // 絆の報酬（作者が確定 2026-11-26）：共鳴の技 ×1.15・雷への耐性 +4
+      bondReward: { effects: [
+        { type: "damageDealt", value: 1.15, skillKind: "resonance" },
+        { type: "resistBonus", element: "thunder", value: 4 }
+      ] },
+      abilities: ["waterHeart"],
+      expReward: 44,
+      goldReward: 18,
+      drops: [
+        { item: "snailShell", rate: 0.30, min: 1, max: 1 },
+        { item: "echoPearl",  rate: 0.10, min: 1, max: 1 }   // 5% → 10%（作者 2026-11-27）
+      ],
+      // ふだんは目の柄が左右に揺れ、殻の縁から水が垂れる。眠ると殻に引っこむ
+      sprite: ["mizuMaimai", "mizuMaimaiSwayA", "mizuMaimai", "mizuMaimaiSwayB"],
+      motion: "snailIdle",
+      poses: { up: "mizuMaimaiUp", wide: "mizuMaimaiWide", hit: "mizuMaimaiHit", sleep: "mizuMaimaiSleep" },
+      motions: {
+        attack: "snailBump", technique: "snailBump", resonance: "snailCast", breath: "snailCast", buff: "snailCast",
+        hit: "snailHit", levelUp: "snailCheer", sleeping: "snailSleeping"
+      }
+    },
+
+    // シズクドリ：速い（先に動いて崩す）。目標 Lv30 123/68/39/83/36・Lv40 193/115/60/129/62・Lv50 271/160/97/184/96・Lv60 349/236/140/244/138・Lv70 410/316/181/346/162
+    shizukuDori: {
+      id: "shizukuDori",
+      name: "シズクドリ",
+      family: "birdKind",
+      element: "water",
+      resistances: { water: 3, wind: 2, thunder: -3, earth: -1 },
+      immunities: [],
+      statusResist: { poison: 0, paralysis: 0, sleep: 0, seal: 5,
+                      blind: 3, curse: 0, instantDeath: 0 },
+      maxLevel: 70,
+      growthRate: {
+        hp:      [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.3 }, { from: 31, rate: 0.37 }, { from: 41, rate: 0.41 }, { from: 51, rate: 0.41 }, { from: 61, rate: 0.32 }],
+        attack:  [{ from: 1, rate: 0.148 }, { from: 25, rate: 0.3 }, { from: 31, rate: 0.43 }, { from: 41, rate: 0.41 }, { from: 51, rate: 0.69 }, { from: 61, rate: 0.73 }],
+        defense: [{ from: 1, rate: 0.131 }, { from: 25, rate: 0.26 }, { from: 31, rate: 0.3 }, { from: 41, rate: 0.53 }, { from: 51, rate: 0.62 }, { from: 61, rate: 0.58 }],
+        speed:   [{ from: 1, rate: 0.163 }, { from: 25, rate: 0.37 }, { from: 31, rate: 0.38 }, { from: 41, rate: 0.46 }, { from: 51, rate: 0.5 }, { from: 61, rate: 0.85 }],
+        pp:      [{ from: 1, rate: 0.143 }, { from: 25, rate: 0.29 }, { from: 31, rate: 0.44 }, { from: 41, rate: 0.56 }, { from: 51, rate: 0.7 }, { from: 61, rate: 0.4 }]
+      },
+      // 図鑑と記録は作者が確定（2026-11-26。私の案を作者が直した）
+      description: "水属性。鍾乳洞の雫の下をくぐって飛ぶ小鳥。雫が落ちるより速く、気づけば先に動かれている。大きな渦を起こして、足を鈍らせてくる。雷に弱い。",
+      records: {
+        used:  "濡れた羽が灯りを映して、青く光る。乾かそうとすると、すぐに水たまりへ戻っていく。",
+        trust: "雫が落ちてくると、先に飛んで受け止めてくれる。おかげで、頭が濡れなくなった。",
+        bond:  "どれだけ速く飛んでも、少し先で必ず待っている。"
+      },
+      baseHp: 19,
+      baseAttack: 11,
+      baseDefense: 7,
+      baseSpeed: 12,
+      basePp: 6,
+      evasion: 0.10,
+      scoutRate: 0.20,
+      spawnRate: 0.45,
+      learnset: [
+        { level: 1,  skill: "tackle" },
+        { level: 4,  skill: "bubble" },
+        { level: 8,  skill: "aqua" },
+        { level: 18, skill: "wave" },
+        { level: 24, skill: "galeSong" },
+        { level: 26, skill: "quickStrike" },
+        { level: 32, skill: "whirlpool" },
+        { level: 36, skill: "quickle" },
+        { level: 50, skill: "tidalBreath" }
+      ],
+      // 絆の報酬（作者が確定 2026-11-26）：水の与ダメージ ×1.15・素早さ ×1.15
+      bondReward: { effects: [
+        { type: "damageDealt", value: 1.15, element: "water" },
+        { type: "statMultiplier", stat: "speed", value: 1.15 }
+      ] },
+      abilities: ["swiftFoot"],
+      expReward: 42,
+      goldReward: 18,
+      drops: [
+        { item: "dropFeather", rate: 0.30, min: 1, max: 1 }
+      ],
+      // ふだんはその場で羽ばたいて浮く（ワカバドリと同じ動き）
+      sprite: ["shizukuDoriUp", "shizukuDori", "shizukuDoriDown", "shizukuDori"],
+      motion: "birdHover",
+      poses: { up: "shizukuDoriUp", down: "shizukuDoriDown", hit: "shizukuDoriHit", sleep: "shizukuDoriSleep" },
+      motions: {
+        attack: "birdPeck", resonance: "birdResonate", breath: "birdBreath",
+        technique: "birdTechnique", buff: "birdBuff", hit: "birdHit", dodge: "birdDodge",
+        guard: "guard", heal: "recover", faint: "tumble", levelUp: "birdCheer", sleeping: "birdSleeping"
+      }
+    },
+
+    // セキジュン：防御を崩す（クラック・スロウで崩し、ほかの敵が狙う）。目標 Lv30 170/61/72/21/29・Lv40 252/95/111/32/50・Lv50 354/127/179/46/77・Lv60 458/194/240/61/111・Lv70 557/264/302/86/130
+    sekijun: {
+      id: "sekijun",
+      name: "セキジュン",
+      family: "constructKind",
+      element: "earth",
+      resistances: { earth: 4, fire: 2, water: -2, wind: -1 },
+      immunities: [],
+      statusResist: { poison: 10, paralysis: 4, sleep: 0, seal: 0,
+                      blind: 0, curse: 0, instantDeath: 0 },
+      maxLevel: 70,
+      growthRate: {
+        hp:      [{ from: 1, rate: 0.167 }, { from: 25, rate: 0.33 }, { from: 31, rate: 0.326 }, { from: 41, rate: 0.41 }, { from: 51, rate: 0.415 }, { from: 61, rate: 0.395 }],
+        attack:  [{ from: 1, rate: 0.143 }, { from: 25, rate: 0.31 }, { from: 31, rate: 0.34 }, { from: 41, rate: 0.32 }, { from: 51, rate: 0.67 }, { from: 61, rate: 0.7 }],
+        defense: [{ from: 1, rate: 0.134 }, { from: 25, rate: 0.32 }, { from: 31, rate: 0.33 }, { from: 41, rate: 0.565 }, { from: 51, rate: 0.51 }, { from: 61, rate: 0.515 }],
+        speed:   [{ from: 1, rate: 0.135 }, { from: 25, rate: 0.2 }, { from: 31, rate: 0.27 }, { from: 41, rate: 0.35 }, { from: 51, rate: 0.38 }, { from: 61, rate: 0.62 }],
+        pp:      [{ from: 1, rate: 0.133 }, { from: 25, rate: 0.3 }, { from: 31, rate: 0.42 }, { from: 41, rate: 0.54 }, { from: 51, rate: 0.68 }, { from: 61, rate: 0.38 }]
+      },
+      // 図鑑と記録は作者が確定（2026-11-26。私の案を作者が直した）
+      description: "地属性。千年かけて伸びた石筍が、ある日歩き出したもの。じっとしているあいだにも体が育ち、戦いが長引くほど硬くなる。水に弱い。",
+      records: {
+        used:  "先から垂れる水を手で受けると、ひんやりと冷たい。石の体なのに、どこか温かい気もする。",
+        trust: "並んで立つと、少しだけ背が伸びていた。背比べを楽しみにしているらしい。",
+        bond:  "千年のあいだ、ひとりで伸び続けてきた。これからは隣で伸びていく。"
+      },
+      baseHp: 25,
+      baseAttack: 10,
+      baseDefense: 12,
+      baseSpeed: 4,
+      basePp: 5,
+      scoutRate: 0.16,
+      spawnRate: 0.40,
+      learnset: [
+        { level: 1,  skill: "tackle" },
+        { level: 5,  skill: "rockThrow" },
+        { level: 10, skill: "harden" },
+        { level: 18, skill: "rockSpike" },
+        { level: 22, skill: "crack" },
+        { level: 26, skill: "guardSong" },
+        { level: 34, skill: "rockBurst" },
+        { level: 38, skill: "collapse" },
+        { level: 49, skill: "shatterArmor" }
+      ],
+      // 絆の報酬（作者が確定 2026-11-26）：水への耐性 +3・HP ×1.12
+      bondReward: { effects: [
+        { type: "resistBonus", element: "water", value: 3 },
+        { type: "statMultiplier", stat: "hp", value: 1.12 }
+      ] },
+      abilities: ["growingStone"],
+      expReward: 46,
+      goldReward: 19,
+      drops: [
+        { item: "stalagmiteShard", rate: 0.30, min: 1, max: 1 }
+      ],
+      // ふだんはほとんど動かない。先の水が筋になって伝い落ち、ときどき小さな腕を片方ずつ上げる（コハクカブトと同じ動き）
+      sprite: ["sekijun", "sekijun", "sekijunRunA", "sekijunRunB", "sekijun", "sekijun", "sekijunArmL",
+               "sekijun", "sekijun", "sekijunRunA", "sekijunRunB", "sekijun", "sekijun", "sekijunArmR"],
+      motion: "beetleIdle",
+      poses: { rear: "sekijunArmsUp", legL: "sekijunArmL", legR: "sekijunArmR", hit: "sekijunHit", sleep: "sekijunSleep" },
+      motions: {
+        attack: "beetleRam", technique: "beetleRam", buff: "beetleBrace", resonance: "beetleBrace", breath: "beetleBrace",
+        hit: "beetleHit", levelUp: "beetleCheer", sleeping: "beetleSleeping"
+      }
+    },
+
+    // ウルヴァーグ：攻め役（水の斬撃と先手）。目標 Lv30 142/74/48/69/29・Lv40 211/113/73/107/50・Lv50 298/153/105/153/78・Lv60 406/204/138/203/121・Lv70 494/289/168/288/154・Lv75 531/324/182/331/170
+    ulvarg: {
+      id: "ulvarg",
+      name: "ウルヴァーグ",
+      family: "beastKind",
+      element: "water",
+      resistances: { water: 3, fire: 2, thunder: -2 },
+      immunities: [],
+      statusResist: { poison: 0, paralysis: 0, sleep: 3, seal: 0,
+                      blind: 7, curse: 0, instantDeath: 0 },
+      maxLevel: 75,
+      growthRate: {
+        hp:      [{ from: 1, rate: 0.168 }, { from: 25, rate: 0.27 }, { from: 31, rate: 0.315 }, { from: 41, rate: 0.395 }, { from: 51, rate: 0.49 }, { from: 61, rate: 0.4 }, { from: 71, rate: 0.335 }],
+        attack:  [{ from: 1, rate: 0.157 }, { from: 25, rate: 0.26 }, { from: 31, rate: 0.33 }, { from: 41, rate: 0.33 }, { from: 51, rate: 0.43 }, { from: 61, rate: 0.705 }, { from: 71, rate: 0.58 }],
+        defense: [{ from: 1, rate: 0.147 }, { from: 25, rate: 0.27 }, { from: 31, rate: 0.32 }, { from: 41, rate: 0.4 }, { from: 51, rate: 0.41 }, { from: 61, rate: 0.37 }, { from: 71, rate: 0.35 }],
+        speed:   [{ from: 1, rate: 0.16 }, { from: 25, rate: 0.27 }, { from: 31, rate: 0.35 }, { from: 41, rate: 0.415 }, { from: 51, rate: 0.455 }, { from: 61, rate: 0.77 }, { from: 71, rate: 0.78 }],
+        pp:      [{ from: 1, rate: 0.14 }, { from: 25, rate: 0.11 }, { from: 31, rate: 0.35 }, { from: 41, rate: 0.47 }, { from: 51, rate: 0.71 }, { from: 61, rate: 0.55 }, { from: 71, rate: 0.54 }]
+      },
+      // 図鑑と記録は作者が確定（2026-11-26。私の案を作者が直した）
+      description: "水属性。水の音に紛れて近づき、一息に斬りかかる狼。水をまとった爪で斬りつけ、ときに先手を取り、爪を振り回して何度も斬る。雷に弱い。",
+      records: {
+        used:  "毛についた雫を、体を振って飛ばしてくる。こちらまでずぶ濡れになった。",
+        trust: "背を向けて眠るようになった。うしろを任されたようだ。",
+        bond:  "水の音の中から現れるのは、もう敵ではない。名前を呼べば、雫より先に駆けてくる。"
+      },
+      baseHp: 22,
+      baseAttack: 12,
+      baseDefense: 8,
+      baseSpeed: 11,
+      basePp: 6,
+      evasion: 0.07,
+      // 通常攻撃は爪で斬る
+      attackEffect: "slash",
+      scoutRate: 0.14,
+      spawnRate: 0.35,
+      learnset: [
+        { level: 1,  skill: "tackle" },
+        { level: 4,  skill: "bite" },
+        { level: 8,  skill: "aqua" },
+        { level: 22, skill: "flowSlash" },
+        { level: 24, skill: "doubleSlash" },
+        { level: 26, skill: "quickStrike" },
+        { level: 32, skill: "wildSlash" },
+        { level: 38, skill: "torrentSlash" },
+        { level: 42, skill: "warCry" },
+        { level: 48, skill: "allOutSlash" }
+      ],
+      // 絆の報酬（作者が確定 2026-11-26）：専用技「雫断ち」（data/skills.js の dropCleave）・雷への耐性 +1
+      bondReward: { skill: "dropCleave", effects: [
+        { type: "resistBonus", element: "thunder", value: 1 }
+      ] },
+      abilities: ["swordMaster"],
+      expReward: 52,
+      goldReward: 22,
+      drops: [
+        // 作者 2026-11-27「狼の落とすものを全体的に下げる」（B4F が狼の階になったため）。爪 30% → 16.67%・首飾り 10% → 6.67%
+        { item: "blueWolfClaw",     rate: 0.1667, min: 1, max: 1 },
+        { item: "wolfFangNecklace", rate: 0.0667, min: 1, max: 1 }
+      ],
+      // 絵は作者が描いたもの（2026-11-26。sprites_marsh.js の ulvarg〜。参考絵/ulvarg_sprites/）。48マス
+      // ふだんは作者の idle 4枚（220ms ずつ）
+      sprite: ["ulvarg", "ulvargIdle1", "ulvargIdle2", "ulvargIdle3"],
+      motion: "ulvBreathe",
+      // attack 通常攻撃 6枚 ／ magic 共鳴 5枚 ／ skill 技 8枚 ／ dodge 回避 4枚 ／ hit 被弾 ／ sleep 眠り
+      poses: {
+        attack0: "ulvargAttack0", attack1: "ulvargAttack1", attack2: "ulvargAttack2",
+        attack3: "ulvargAttack3", attack4: "ulvargAttack4", attack5: "ulvargAttack5",
+        magic0: "ulvargMagic0", magic1: "ulvargMagic1", magic2: "ulvargMagic2",
+        magic3: "ulvargMagic3", magic4: "ulvargMagic4",
+        skill0: "ulvargSkill0", skill1: "ulvargSkill1", skill2: "ulvargSkill2", skill3: "ulvargSkill3",
+        skill4: "ulvargSkill4", skill5: "ulvargSkill5", skill6: "ulvargSkill6", skill7: "ulvargSkill7",
+        dodge0: "ulvargDodge0", dodge1: "ulvargDodge1", dodge2: "ulvargDodge2", dodge3: "ulvargDodge3",
+        hit: "ulvargHit", sleep: "ulvargSleep"
+      },
+      // 体技・斬撃は skill、共鳴・ブレス・強化は magic（ザンガルドと同じ分け方）
+      motions: {
+        attack: "ulvSlash", technique: "ulvCleave", resonance: "ulvResonate", breath: "ulvResonate", buff: "ulvResonate",
+        hit: "ulvHit", dodge: "ulvDodge", faint: "fall", levelUp: "ulvCheer", sleeping: "ulvSleeping"
+      }
+    },
+
+    /**
+     * 滴る鍾乳洞の主「ハンザキ」（v1.8.0）。鍾乳洞の淵に棲む、大きな山椒魚。
+     * ★ 作者が決めたもの（デスクトップの ハンザキ.md 2026-11-27）：主のときの値（data/bosses.js の dripWarden）・
+     *   耐性・状態異常・特性 しぶとい・経験値とゴールド・落とし物・勧誘率 0.02・仲間のときの値・覚える技・絆の報酬・図鑑の説明と記録。
+     *   能力値の目標（個体値0・素直）Lv24 148/49/56/20/30・Lv30 190/64/72/26/38・Lv40 272/92/108/36/60・Lv50 387/130/165/50/93・
+     *   Lv60 495/195/220/64/128・Lv70 609/265/275/80/150・Lv80 692/310/330/100/175（HP/攻/防/速/PP）。成長率は作者の表のまま
+     * ★ 絵と動きは私が描いた（作者の見ての返事待ち）
+     */
+    hanzaki: {
+      id: "hanzaki",
+      name: "ハンザキ",
+      family: "beastKind",
+      element: "water",
+      resistances: { water: 8, fire: 3, thunder: -2 },
+      immunities: [],
+      // 仲間のときの値（作者の表）。主のあいだは data/bosses.js の immuneToStatus・statusResist
+      statusResist: { poison: 10, paralysis: 5, sleep: 5, seal: 0,
+                      blind: 0, curse: 0, instantDeath: 3 },
+      maxLevel: 80,
+      growthRate: {
+        hp:      [{ from: 1, rate: 0.187 }, { from: 25, rate: 0.25 }, { from: 31, rate: 0.292 }, { from: 41, rate: 0.411 }, { from: 51, rate: 0.385 }, { from: 61, rate: 0.41 }, { from: 71, rate: 0.295 }],
+        attack:  [{ from: 1, rate: 0.198 }, { from: 25, rate: 0.26 }, { from: 31, rate: 0.32 }, { from: 41, rate: 0.42 }, { from: 51, rate: 0.72 }, { from: 61, rate: 0.78 }, { from: 71, rate: 0.5 }],
+        defense: [{ from: 1, rate: 0.2 }, { from: 25, rate: 0.27 }, { from: 31, rate: 0.36 }, { from: 41, rate: 0.57 }, { from: 51, rate: 0.55 }, { from: 61, rate: 0.55 }, { from: 71, rate: 0.55 }],
+        speed:   [{ from: 1, rate: 0.174 }, { from: 25, rate: 0.25 }, { from: 31, rate: 0.25 }, { from: 41, rate: 0.35 }, { from: 51, rate: 0.35 }, { from: 61, rate: 0.4 }, { from: 71, rate: 0.5 }],
+        pp:      [{ from: 1, rate: 0.174 }, { from: 25, rate: 0.23 }, { from: 31, rate: 0.37 }, { from: 41, rate: 0.55 }, { from: 51, rate: 0.58 }, { from: 61, rate: 0.37 }, { from: 71, rate: 0.41 }]
+      },
+      description: "水属性。鍾乳洞の主と呼ばれている。ぬめる厚い皮に覆われた、大きな山椒魚。普段動きは鈍いが、瞬発的な攻撃をしてくる。雷に弱い。",
+      records: {
+        used:  "皮に触れると、ひんやりとぬめった。手を離したあとも、しばらく指が湿っている。",
+        trust: "水たまりを見つけるたびに、腹をつけて休む。待っていると、ゆっくり追いついてくる。",
+        bond:  "百年を一つの洞で過ごしてきた。いまは、知らない水の匂いを一緒に嗅いでいる。"
+      },
+      // 絆の報酬（作者 2026-11-27）：しぶといが1戦闘に2回まで働く
+      bondReward: { effects: [
+        { type: "endureUses", value: 2 }
+      ] },
+      baseHp: 28,
+      baseAttack: 9,
+      baseDefense: 10,
+      baseSpeed: 4,
+      basePp: 6,
+      scoutRate: 0.02,   // 作者 2026-11-27「2％」（沼の主から先の 2.5% より低い）
+      // 主なので、ふつうの遭遇には出ない
+      spawnRate: 0,
+      learnset: [
+        { level: 1,  skill: "tackle" },
+        { level: 6,  skill: "aqua" },
+        { level: 14, skill: "bodyPress" },
+        { level: 18, skill: "wave" },
+        { level: 24, skill: "chargeUp" },
+        { level: 28, skill: "slow" },
+        { level: 30, skill: "whirlpool" },
+        { level: 36, skill: "torrent" },
+        { level: 37, skill: "gravity" },
+        { level: 40, skill: "fortressForm" },
+        { level: 50, skill: "maelstrom" },
+        { level: 51, skill: "bind" }
+      ],
+      // 主のときの技（作者の表「行動（ランダム）」）。通常攻撃と合わせた8つから選ぶ（data/bosses.js の skillRate）
+      enemySkills: [
+        { level: 1, skill: "wave" },
+        { level: 1, skill: "whirlpool" },
+        { level: 1, skill: "gravity" },
+        { level: 1, skill: "burstFist" },
+        { level: 1, skill: "venomBreath" },
+        { level: 1, skill: "hush" },
+        { level: 1, skill: "greaterCure" }
+      ],
+      abilities: ["tenacious"],
+      expReward: 280,
+      goldReward: 190,
+      drops: [
+        { item: "hanzakiHide", rate: 1.0, min: 1, max: 1 }
+      ],
+      // 絵は作者が描いたもの（2026-11-27。sprites_marsh.js の hanzaki〜。参考絵/hanzaki_sprites/）。48マス・右向き
+      // ふだんは作者の idle 4枚
+      sprite: ["hanzaki", "hanzakiIdle1", "hanzakiIdle2", "hanzakiIdle3"],
+      sizeScale: 1.4,
+      motion: "hanzakiIdle",
+      // attack 通常攻撃 6枚 ／ magic 共鳴 5枚 ／ skill 技 8枚 ／ dodge 回避 4枚 ／ hit 被弾 ／ sleep 眠り
+      poses: {
+        attack0: "hanzakiAttack0", attack1: "hanzakiAttack1", attack2: "hanzakiAttack2",
+        attack3: "hanzakiAttack3", attack4: "hanzakiAttack4", attack5: "hanzakiAttack5",
+        magic0: "hanzakiMagic0", magic1: "hanzakiMagic1", magic2: "hanzakiMagic2",
+        magic3: "hanzakiMagic3", magic4: "hanzakiMagic4",
+        skill0: "hanzakiSkill0", skill1: "hanzakiSkill1", skill2: "hanzakiSkill2", skill3: "hanzakiSkill3",
+        skill4: "hanzakiSkill4", skill5: "hanzakiSkill5", skill6: "hanzakiSkill6", skill7: "hanzakiSkill7",
+        dodge0: "hanzakiDodge0", dodge1: "hanzakiDodge1", dodge2: "hanzakiDodge2", dodge3: "hanzakiDodge3",
+        hit: "hanzakiHit", sleep: "hanzakiSleep"
+      },
+      // 体技・斬撃は skill、共鳴・ブレス・強化は magic（ウルヴァーグと同じ分け方）
+      motions: {
+        attack: "hanzakiBite", technique: "hanzakiSlam", resonance: "hanzakiCast", breath: "hanzakiCast", buff: "hanzakiCast",
+        hit: "hanzakiHurt", dodge: "hanzakiDodge", faint: "fall", levelUp: "hanzakiCheer", sleeping: "hanzakiSleeping"
       }
     }
   };

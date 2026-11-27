@@ -19,6 +19,15 @@
  *
  * ▼ 枠の高さは行数から決める
  *   説明ごとに行数が違うので、決め打ちにすると余白が空いたりはみ出したりする。
+ *
+ * ▼ 指で遊んでいるときの文（v1.8.0）
+ *   説明に linesTouch があれば、指のときはそちらを出す（キーの名前を出さないため）。
+ *
+ * ▼ 絵（v1.8.0。作者の指定「チュートリアルに画像を挿入」）
+ *   説明に image: { src, w, h } があれば、見出しと本文のあいだに絵を置く。
+ *   絵は assets/tutorial/ の PNG（開発用サーバーの撮影の道具で撮って矢印を描いたもの）。
+ *   絵があるときは枠が大きくなるので、画面の真ん中に置き、横幅も絵に合わせて広げる。
+ *   読み込めなかった絵は場所ごと無かったことにする（文だけで読めるように書いてある）。
  */
 (function (NS) {
   "use strict";
@@ -52,6 +61,41 @@
     this.stopButton = new NS.TextButton(panel, { x: 0, y: 0, w: 0, h: 0 }, "");
   }
 
+  /** 読み込んだ絵（src → Image）。説明の画面は何度も作り直すので、絵は全体で1つずつ持つ */
+  var imageCache = {};
+
+  function imageOf(src) {
+    if (!imageCache[src]) {
+      var img = new Image();
+      img.onerror = function () { img._failed = true; };
+      img.src = src;
+      imageCache[src] = img;
+    }
+    return imageCache[src];
+  }
+
+  /** いまの説明の絵（無い・読めなかったときは null） */
+  TutorialBox.prototype._image = function () {
+    var spec = this.current && this.current.image;
+    if (!spec || !spec.src) return null;
+    var img = imageOf(spec.src);
+    if (img._failed) return null;
+    return { img: img, w: spec.w || 400, h: spec.h || 225 };
+  };
+
+  /** 絵が使う高さ（絵＋上下のすき間） */
+  TutorialBox.prototype._imageHeight = function () {
+    var image = this._image();
+    return image ? image.h + 12 : 0;
+  };
+
+  /** いま出す本文。指のときは linesTouch があればそちら（v1.8.0） */
+  TutorialBox.prototype._lines = function () {
+    if (!this.current) return [];
+    if (this._touch() && this.current.linesTouch) return this.current.linesTouch;
+    return this.current.lines || [];
+  };
+
   /** 指で遊んでいるか（v1.7.0）。そのときはキーの名前を出さない */
   TutorialBox.prototype._touch = function () {
     return !!(NS.isTouchMode && NS.isTouchMode());
@@ -76,8 +120,8 @@
   /** 操作案内の行の y（文字の下の線） */
   TutorialBox.prototype._hintY = function (rect) {
     var L = this.layout;
-    var lines = (this.current && this.current.lines) ? this.current.lines.length : 0;
-    return this.panel.innerOrigin(rect).y + (L.titleHeight || 30) + 8
+    var lines = this._lines().length;
+    return this.panel.innerOrigin(rect).y + (L.titleHeight || 30) + 8 + this._imageHeight()
          + (L.lineHeight || 22) * lines + (L.hintHeight || 28);
   };
 
@@ -109,8 +153,19 @@
   TutorialBox.prototype.show = function (steps) {
     if (!steps || steps.length === 0) return;
 
-    this.queue = steps.slice();
-    this.current = this.queue.shift();
+    // 出ている最中に別の説明が来たら（レベルアップと絆が同じ戦闘で起きたときなど）後ろに並べる（v1.8.0）
+    if (this.current) {
+      this.queue = this.queue.concat(steps);
+    } else {
+      this.queue = steps.slice();
+      this.current = this.queue.shift();
+    }
+
+    // 絵は先に読み始めておく（めくったときに待たせない）
+    var all = [this.current].concat(this.queue);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] && all[i].image && all[i].image.src) imageOf(all[i].image.src);
+    }
   };
 
   TutorialBox.prototype.isActive = function () {
@@ -152,13 +207,25 @@
     var L = this.layout;
     var box = L.box || { x: 180, y: 170, w: 440 };
     var lineHeight = L.lineHeight || 22;
-    var lines = (this.current && this.current.lines) ? this.current.lines.length : 0;
+    var lines = this._lines().length;
+    var pad = L.padding || 20;
 
-    // 見出し＋本文＋操作案内。padding は上下ぶん
-    var height = (L.padding || 20) * 2 + (L.titleHeight || 30)
+    // 見出し＋（絵）＋本文＋操作案内。padding は上下ぶん
+    var height = pad * 2 + (L.titleHeight || 30) + this._imageHeight()
                + lineHeight * lines + (L.hintHeight || 28);
 
-    return { x: box.x, y: box.y, w: box.w, h: height };
+    var image = this._image();
+    if (!image) return { x: box.x, y: box.y, w: box.w, h: height };
+
+    // 絵があるときは画面の真ん中。横幅は絵が入るまで広げる
+    var cfg = (this.game.data && this.game.data.config) || {};
+    var screenW = cfg.canvasWidth || 800, screenH = cfg.canvasHeight || 600;
+    var w = Math.max(box.w, image.w + pad * 2);
+    return {
+      x: Math.round((screenW - w) / 2),
+      y: Math.max(8, Math.round((screenH - height) / 2)),
+      w: w, h: height
+    };
   };
 
   TutorialBox.prototype.render = function () {
@@ -186,7 +253,24 @@
       { font: L.titleFont || t.font, color: t.cursorColor });
     y += 8;
 
-    var lines = this.current.lines || [];
+    // 絵（v1.8.0）。枠の真ん中に置き、細い線で囲む
+    var image = this._image();
+    if (image) {
+      var ix = Math.round(rect.x + (rect.w - image.w) / 2);
+      var iy = y + 6;
+      if (image.img.complete && image.img.naturalWidth > 0) {
+        ctx.drawImage(image.img, ix, iy, image.w, image.h);
+      } else {
+        ctx.fillStyle = "#000";   // 読み込み中。場所だけ取っておく（枠の大きさを変えない）
+        ctx.fillRect(ix, iy, image.w, image.h);
+      }
+      ctx.strokeStyle = t.panelBorder || "#3a4266";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(ix + 0.5, iy + 0.5, image.w - 1, image.h - 1);
+      y += this._imageHeight();
+    }
+
+    var lines = this._lines();
     for (var i = 0; i < lines.length; i++) {
       y += lineHeight;
       this.panel.drawText(lines[i], origin.x, y, { color: t.textColor });

@@ -23,7 +23,7 @@
   var HIT_RESULT = { damage: true, miss: true, immune: true };
   var FAIL_RESULT = { statusMiss: true, statusImmune: true, modifierMiss: true };
   // 行動の区切り（ここで1つの行動の出来事が終わる）
-  var ACTION_BREAK = { useSkill: true, wait: true, defend: true, statusBlocked: true, statusDamage: true,
+  var ACTION_BREAK = { useSkill: true, wait: true, defend: true, statusBlocked: true, statusDamage: true, slipDamage: true,
                        modifierEnd: true, battleEnd: true, custom: true, noSkill: true };
 
   /**
@@ -55,7 +55,7 @@
     var side = head.side;
     var k, e;
     // この行動で相手（や味方）に起きた結果だけ。特性の反撃などで本人に返ってきたものは除く
-    var hits = [], fails = [], mods = [], misses = [], results = [], heals = [];
+    var hits = [], fails = [], mods = [], misses = [], results = [], heals = [], dispels = [];
     for (k = 0; k < group.length; k++) {
       e = group[k];
       if (e.type === "critical") { e.logText = ""; continue; }
@@ -67,6 +67,7 @@
       if (e.type === "miss") misses.push(e);
       if (FAIL_RESULT[e.type]) fails.push(e);
       if (e.type === "modifier" && e.skillId === skill.id) mods.push(e);
+      if (e.type === "dispel" && e.skillId === skill.id) dispels.push(e);
     }
 
     // クリティカルはダメージの行の頭に付ける（何回か当てる技・全体の技でまとめた行も同じ）
@@ -82,11 +83,44 @@
     }
     if (distinctTargets(fails) >= 2) this._mergeGroup(fails, this.templates.groupFail);
     if (distinctTargets(mods) >= 2 && sameModifier(mods)) this._mergeModifiers(mods);
-    if (heals.length >= 2) this._mergeAllHeal(heals);
+    // ハッスルダンス（味方をでたらめに何回か回復。v1.8.0）は回数と、味方ごとの合計
+    if (skill.randomTargets && heals.length >= 1) this._mergeMultiHeal(heals);
+    else if (heals.length >= 2) this._mergeAllHeal(heals);
+    if (distinctTargets(dispels) >= 2) this._mergeDispels(dispels);
+  };
+
+  /** ハッスルダンス：「4回 舞って スライム 140・ヒカリムシ 70 回復した!」（v1.8.0） */
+  BattleMessageFormatter.prototype._mergeMultiHeal = function (heals) {
+    var t = this.templates;
+    var order = [], totals = {};
+    for (var k = 0; k < heals.length; k++) {
+      var name = this._targetName(heals[k]);
+      if (!(name in totals)) { totals[name] = 0; order.push(name); }
+      totals[name] += Math.max(0, heals[k].healAmount);
+    }
+    var parts = order.map(function (n) { return fill(t.multiHealPart, { target: n, amount: totals[n] }); });
+    this._writeOnce(heals, fill(t.multiHeal, { hits: heals[0].hits || heals.length, list: parts.join(t.listJoin || "・") }));
+  };
+
+  /**
+   * 全体の強化消し（黄昏の風・万雷轟天。v1.8.0）。消えた相手が2体以上なら「先頭の名前たち」の1行、
+   * 消すものが無かった相手の行は出さない。誰にも無ければ「しかし 消せる強化が なかった」の1行
+   */
+  BattleMessageFormatter.prototype._mergeDispels = function (dispels) {
+    var t = this.templates;
+    var got = dispels.filter(function (e) { return (e.names || []).length > 0; });
+    if (got.length === 0) { this._writeOnce(dispels, t.dispelNoneAll); return; }
+    for (var k = 0; k < dispels.length; k++) if (got.indexOf(dispels[k]) < 0) dispels[k].logText = "";
+    if (got.length >= 2) this._writeOnce(got, fill(t.dispelGroup, { target: this._targetName(got[0]) }));
   };
 
   /** 全体の回復で2体以上が治った：先頭の名前たち の HPが 平均 N 回復した（全体のダメージと同じ書き方） */
   BattleMessageFormatter.prototype._mergeAllHeal = function (heals) {
+    // 全員が全快の技で満タンになった（キュアリスオール。v1.8.0）
+    if (heals.every(function (h) { return h.full; }) && this.templates.groupHealedAll) {
+      this._writeOnce(heals, fill(this.templates.groupHealedAll, { target: this._targetName(heals[0]) }));
+      return;
+    }
     var sum = 0;
     for (var k = 0; k < heals.length; k++) sum += Math.max(0, heals[k].healAmount);
     this._writeOnce(heals, fill(this.templates.groupHealed, {
@@ -180,10 +214,15 @@
         noun = names[e.stat] || e.stat;
         var up = (e.type === "statMultiplier") ? e.value > 1 : e.value > 0;
         var big = (e.type === "statMultiplier") && (up ? e.value >= 1.5 : e.value <= 0.5);
-        verb = up ? (big ? words.upBig : words.up) : (big ? words.downBig : words.down);
+        var huge = (e.type === "statMultiplier") && up && e.value >= 2 && words.upHuge;
+        verb = up ? (huge ? words.upHuge : big ? words.upBig : words.up) : (big ? words.downBig : words.down);
       } else if (e.type === "accuracyMultiplier") {
         noun = names.accuracy;
         verb = e.value > 1 ? words.up : words.down;
+      } else if (e.type === "evasionBonus") {
+        // 陽炎の舞（v1.8.0）
+        noun = names.evasion;
+        verb = e.value > 0 ? words.up : words.down;
       } else if (e.type === "damageTaken") {
         noun = names.damageTaken;
         verb = e.value < 1 ? words.less : words.more;
@@ -312,7 +351,28 @@
         return fill(event.amount > 0 ? t.ppDamage : t.ppDamageNone,
                     { target: this._targetName(event), amount: event.amount });
       case "miss":
+        // 会心斬りでクリティカルでなかった（v1.8.0）
+        if (event.critMiss && t.critMiss) return t.critMiss;
         return fill(t.miss, { target: this._targetName(event) });
+      // v1.8.0 の技
+      case "guard":
+        return fill(t.guard, { target: this._targetName(event),
+          ally: this._targetName({ targetName: event.allyName, targetSide: event.targetSide }) });
+      case "reflect":
+        return fill(t.reflect, { target: this._targetName(event), skill: event.skillName });
+      case "guardCover":
+        return fill(t.guardCover, { target: this._targetName(event),
+          ally: this._targetName({ targetName: event.allyName, targetSide: event.targetSide }) });
+      case "ppShare":
+        return fill(t.ppShare, { actor: this._targetName({ targetName: event.actorName, targetSide: event.targetSide }),
+          target: this._targetName(event), amount: event.amount });
+      case "ppShareNone":
+        return fill(event.reason === "full" ? t.ppShareFull : t.ppShareEmpty,
+          { actor: this._targetName({ targetName: event.actorName, targetSide: event.targetSide }), target: this._targetName(event) });
+      case "cleanse":
+        return fill((event.names || []).length > 0 ? t.cleanse : t.cleanseNone, { target: this._targetName(event) });
+      case "slipDamage":
+        return fill(t.slipDamage, { target: this._targetName(event), name: event.name, amount: event.amount });
       // クリティカルは単独の行にしない。ダメージの行の頭に付ける（2026-11-03 作者の指定）
       case "critical":
         return null;
@@ -352,11 +412,16 @@
       case "ppRegen":
         return fill(t.abilityPpRegen, { target: this._targetName(event),
           ability: event.abilityName, amount: event.amount });
+      case "growStat":
+        return fill(t.abilityGrowStat, { target: this._targetName(event), ability: event.abilityName,
+          stat: ((t.logStats || {})[event.stat]) || event.stat });
       case "undying":
         return fill(t.undying,
                     { target: this._targetName(event), ability: event.abilityName });
       case "undyingEnd":
         return fill(t.undyingEnd, { target: this._targetName(event) });
+      case "endure":
+        return fill(t.endure, { target: this._targetName(event), ability: event.abilityName });
       case "partyFirstStrike":
         return fill(t.partyFirstStrike, { ability: event.abilityName });
       // v1.0.0 追い風・芽吹き
@@ -372,6 +437,8 @@
       case "wardSkill":
         return fill(t.wardSkill, { target: this._targetName(event) });
       case "heal":
+        // 全快の技で満タンまで戻った（キュアリス。v1.8.0）
+        if (event.full && t.healedAll) return fill(t.healedAll, { target: this._targetName(event) });
         return fill(t.healed, { target: this._targetName(event), amount: event.healAmount });
       case "healFull":
         return event.everyone ? t.healFullAll : fill(t.healFull, { target: this._targetName(event) });
@@ -389,7 +456,8 @@
       case "reviveNone":
         return fill(t.reviveNone, { target: this._targetName(event) });
       case "modifierEnd":
-        return fill(t.modifierEnd,
+        // 焦熱・裂傷は切れたときの文が別（技の modifier.endMessage。v1.8.0）
+        return fill(event.endMessage || t.modifierEnd,
                     { target: this._targetName(event), skill: event.skillName });
 
       // 状態異常。言い回しは data/statuses.js に1件ずつ書いてあり、

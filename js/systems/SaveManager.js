@@ -194,6 +194,16 @@
     var party = NS.Party.fromSaveData(payload.party, this.data, this.data.config.partyMax);
     if (party.isEmpty()) return fail("broken");
 
+    // なくした品（ベールの書など。data/items.js の removedItemRefunds）は、買値のゴールドに替える（v1.8.0）。
+    // 持ち物からは Inventory.fromSaveData が読み飛ばすので、ここで数えるだけ
+    var refund = 0;
+    var refunds = this.data.removedItemRefunds || (NS.rawData && NS.rawData.removedItemRefunds) || {};
+    var savedSlots = (payload.inventory && payload.inventory.slots) || [];
+    for (var r = 0; r < savedSlots.length; r++) {
+      var rid = savedSlots[r] && savedSlots[r].itemId;
+      if (rid && refunds[rid] && !this.data.getItem(rid)) refund += refunds[rid] * (savedSlots[r].count || 0);
+    }
+
     return {
       success: true,
       reason: "loaded",
@@ -204,8 +214,9 @@
         storage: NS.MonsterStorage.fromSaveData(
           payload.storage, this.data, this.data.config.storageMax),
         inventory: NS.Inventory.fromSaveData(payload.inventory, this.data),
-        // 古いセーブには無いので、その場合は 0 から始める
-        gold: payload.gold || 0,
+        // 古いセーブには無いので、その場合は 0 から始める。なくした品の払い戻しもここで足す（v1.8.0）
+        gold: (payload.gold || 0) + refund,
+        refundedGold: refund,
         discovery: NS.Discovery.fromSaveData(payload.discovery),
         // チュートリアルの記録。**無い場合は「全部もう見た」扱いにする**
         //   （この仕組みができる前のセーブ。途中まで進めた人に

@@ -37,7 +37,8 @@
  *
  * ▼ 効かない状態異常は data/battle.js の bossImmuneToStatus（全ボス共通）。
  *   逃走（bossCanFlee）と同じで、ボスごとに書くと足すときに書き忘れるため1か所にまとめてある。
- *   いまは 即死・封印・盲目 の3つ。理由はそのファイルのコメントを参照。
+ *   いまは 即死 だけ（v1.8.0 から。封印・盲目は主ごとに決める）。理由はそのファイルのコメントを参照。
+ * ▼ statusResist : 主として出ているあいだだけの状態異常の耐性（v1.8.0）。書いたものだけ種族の statusResist の代わりになる。仲間にすると外れる
  *   statMultiplier と同じで、仲間に迎えたときはその種族そのままの耐性に戻る。
  *
  *   immuneToStatus : その主だけに足したいものがあるときだけ書く（共通のぶんと両方が効く）。
@@ -92,7 +93,9 @@
       // 主の強さを変えたいときは、この倍率だけを触ればよい
       statMultiplier: { hp: 1.59, attack: 1.71, defense: 1.10, speed: 1.57, pp: 1.18 },
       // HP111。毒（1/8）が入ると13/ターンで、詰めた戦いが崩れる
-      immuneToStatus: ["poison"],
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
+      immuneToStatus: [],
+      statusResist: { poison: 9, paralysis: 7, sleep: 0, seal: 0, blind: 0, curse: 0 },
       title: "坑道の主",
       scoutableWhen: "mossyMine",
       isFinal: false
@@ -113,7 +116,9 @@
       // 1.04 を掛けて同じ42に戻してある（主の強さは前と同じ）
       statMultiplier: { hp: 2.16, attack: 1.04, defense: 1.65, speed: 0.70, pp: 2.13 },
       // HP208。毒が入ると26/ターン
-      immuneToStatus: ["poison"],
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
+      immuneToStatus: [],
+      statusResist: { poison: 9, paralysis: 7, sleep: 0, seal: 5, blind: 0, curse: 0 },
       // 5ターンで一巡する。息を吐いた直後に殴ってくる。
       // v1.4.4（2026-11-14 作者の指定）：3手目の「待つ」を通常攻撃にした（休む番が無くなった）。
       // 共鳴・ブレスの攻撃力の係数を下げて（共鳴 0.15・ブレス 0.10）、火の息とファイアが弱くなったぶんを戻すため
@@ -141,7 +146,9 @@
       // HPの倍率だけ極端に大きいのは、王を「長く殴り続ける相手」にするため
       statMultiplier: { hp: 3.13, attack: 1.47, defense: 1.03, speed: 1.60, pp: 1.61 },
       // HP370。毒が入ると46/ターンで、味方3体の1ターン火力の8割に届く
-      immuneToStatus: ["poison"],
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
+      immuneToStatus: ["paralysis"],
+      statusResist: { poison: 9, sleep: 5, seal: 5, blind: 3, curse: 2 },
       // 5ターンで一巡する。重い一撃が2回来るが、そのあいだに通常攻撃が挟まる。
       // 読み切れば「ボディプレスの番だけ防御する」という戦い方ができる
       actionPattern: [
@@ -193,7 +200,9 @@
       level: 21,
       statMultiplier: { hp: 3.85, attack: 1.75, defense: 1.11, speed: 1.5, pp: 2.6 },
       // 毒はこいつが出しているので効かない（HP431で上限の50/ターンに達する）
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
       immuneToStatus: ["poison"],
+      statusResist: { paralysis: 3, sleep: 0, seal: 0, blind: 0, curse: 0 },
       // 覚えている技をひととおり回す。通常攻撃は1回だけ。
       //
       // ★ 通常攻撃を並べると主が弱くなる。
@@ -224,7 +233,7 @@
      *     HP倍率 2.6 → 43%   2.8（攻1.6）→ 40%   3.0 → 21%   3.05 → 17%   3.1 → 15%   3.2 → 10%
      *   沼の主と同じく、HP倍率が急に効く。動かすときは 0.05 刻みで測り直すこと。
      *   この表は種族の値が決まる前に測ったもの。いまの値（下の statMultiplier）での勝率は README の主の欄
-     * ★ 効かない状態異常：毒・眠り（＋全部の主に共通の即死・封印・盲目）。麻痺は種族の耐性 +9 でほぼ効かない
+     * ★ 効かない状態異常：v1.8.0 から眠り・盲目（＋全部の主に共通の即死）。毒5・麻痺9・封印5・呪い3（作者の表 2026-11-27）
      * ★ 行動手順（6手で一巡）：
      *   ルートスパイク（全体・地）→ 眠りの息（全体・眠り35%）→ 通常攻撃
      *   → 50% 必ずクリティカルの通常攻撃 ／ 50% ゲイル（全体・風）
@@ -238,7 +247,9 @@
       //   主として出たときの目標値 HP925 攻101 防56 速34 PP150（性格「素直」・個体値0）に、ちょうどなる倍率にしてある。
       //   （資料の目安 6.61/1.75/1.48/1.14/4.42 は「切り捨てで目標値になる」目安。結果が同じになる最小の値を探して置いた）
       statMultiplier: { hp: 6.577, attack: 1.739, defense: 1.474, speed: 1.13, pp: 4.401 },
-      immuneToStatus: ["poison", "sleep"],
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
+      immuneToStatus: ["sleep", "blind"],
+      statusResist: { poison: 5, paralysis: 9, seal: 5, curse: 3 },
       actionPattern: [
         "rootSpike",
         "sleepBreath",
@@ -261,7 +272,7 @@
     /**
      * 萌芽の穴・千年樹の根底の主「カラクリモリ」（v1.3.0。名前は作者が確定 2026-11-10）。萌芽の穴の最後の主。
      * ★ 作者が決めたもの（2026-11-01〜03）：Lv32・主のとき HP1050 攻135 防65 速40・PP無限・1ターンに1〜2回・仲間にできる・
-     *   効かない状態異常は毒と麻痺（＋全部の主に共通の即死・封印・盲目。眠り・呪いは効く）・特性 放電・行動の順番。
+     *   効かない状態異常は毒と麻痺（＋全部の主に共通の即死。v1.8.0 から封印3・盲目3・呪い5・眠り0）・特性 放電・行動の順番。
      *   「最序盤最後のヌシなだけあってかなり強めにしたい」（作者）
      * ★ 行動手順（9手で一巡。1ターンに2回動くと2手進む）：
      *   鼓舞の舞（自分の攻撃を上げる）→ 鎧くずし（1体の防御を下げる）→ いなずま（全体・雷）
@@ -276,7 +287,9 @@
       // 主として出たときの値 HP1050 攻135 防65 速40 PP150（性格「素直」・個体値0）に、ちょうどなる倍率（2026-11-03 作者が決めた）。
       // 種族の成長率が変わったら、同じ値になるように測り直す
       statMultiplier: { hp: 5.570, attack: 1.953, defense: 0.837, speed: 1.33, pp: 3.80 },
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
       immuneToStatus: ["poison", "paralysis"],
+      statusResist: { sleep: 0, seal: 3, blind: 3, curse: 5 },
       infinitePp: true,
       actionsPerTurn: { min: 1, max: 2 },
       actionPattern: [
@@ -299,6 +312,35 @@
       title: "カラクリモリ",
       scoutableWhen: "ancientRoots",
       isFinal: false
+    },
+
+    /**
+     * 涵養の穴・滴る鍾乳洞の主「ハンザキ」（v1.8.0）。鍾乳洞の淵に棲む、大きな山椒魚。
+     * ★ 作者が決めたもの（デスクトップの ハンザキ.md 2026-11-27。「難易度は高いもの」）：
+     *   Lv35・主のとき HP1120 攻163 防110 速53 PP150・PP無限・1ターンに1回（40%）〜2回（60%）・
+     *   効かない状態異常は毒・麻痺・封印（＋全主共通の即死）・眠り5・盲目5・呪い0・特性 しぶとい・誘えるのは鍾乳洞クリアのあと。
+     * ★ 行動は決まった順番でなく「ランダム」（作者の表）：ウェーブ・大渦・グラビティ・ばくれつけん・どくのいき・
+     *   通常攻撃・ハッシュ・キュアラ の8つ。技は data/monsters.js の enemySkills の7つで、技を使う確率 7/8（skillRate）。
+     *   ふつうの敵と同じ決め方なので、HPが減っていなければキュアラ、掛かったままならグラビティは選ばない（手番を捨てないため）
+     */
+    dripWarden: {
+      id: "dripWarden",
+      species: "hanzaki",
+      level: 35,
+      // 主として出たときの値 HP1120 攻163 防110 速53 PP150（性格「素直」・個体値0）に、ちょうどなる倍率。
+      // 作者の表の ×4.85/2.09/1.22/1.71/3.06 を、値がぴったり出るところまで細かくしたもの。種族の成長率が変わったら測り直す
+      statMultiplier: { hp: 4.843, attack: 2.079, defense: 1.22, speed: 1.71, pp: 3.037 },
+      // 主のあいだの状態異常（作者の表 2026-11-27。即死は全主共通で効かない）。immuneToStatus＝効かない・statusResist＝効きにくさ（種族の値の代わり）
+      immuneToStatus: ["poison", "paralysis", "seal"],
+      statusResist: { sleep: 5, blind: 5, curse: 0 },
+      infinitePp: true,
+      actionsPerTurn: { min: 1, max: 2, weights: [0.4, 0.6] },
+      skillRate: 0.875,
+      title: "ハンザキ",
+      scoutableWhen: "drippingCave",
+      isFinal: false,
+      // 階段の前の問いかけ（v1.8.0。作者「入れましょう」2026-11-27。文は私の案。DungeonScene._onStairs）
+      stairsPrompt: "淵の底で、何かが目を開けた。\nどうする?"
     }
   };
 
@@ -361,7 +403,8 @@
           // 1戦目は作者が確定（2026-11-18）。補正なし・性格は素直・個体値0で固定（負けて挑み直しても同じ相手）。装備は揺籃のもの
           { species: "flamin", minLevel: 30, maxLevel: 30, nature: "balanced", ivs: 0, skills: ["flame", "armorBreak", "doubleSlash", "powerResonance"],
             equipment: ["blazeCharm", "scorchedShellArmor", "emberRing"] },
-          { species: "rocky",  minLevel: 29, maxLevel: 29, nature: "balanced", ivs: 0, skills: ["rockSpike", "wardSongEarth", "guardSong"],
+          // 1.8.0：ストーンベールをなくした。エレメントバリアは使わせない（作者の指定 2026-11-27）
+          { species: "rocky",  minLevel: 29, maxLevel: 29, nature: "balanced", ivs: 0, skills: ["rockSpike", "guardSong"],
             equipment: ["marshSpear", "mireArmor"] },
           { species: "batty",  minLevel: 29, maxLevel: 29, nature: "balanced", ivs: 0, skills: ["drainBite", "doubleSlash", "galeSong", "armorBreak"],
             equipment: ["abyssFang", "mossCharm", "swiftPlume"] }

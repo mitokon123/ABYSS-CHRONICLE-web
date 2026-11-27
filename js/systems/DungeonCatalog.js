@@ -105,12 +105,28 @@
      */
     isConditionMet: function (condition, cleared, gameData) {
       if (!condition) return true;
+      // 出来事を済ませたら開く（v1.8.0。{ event: "chronicleQualifier", eventName: "…" }）。
+      // 済ませた印は game.doneEvents にあるので、Game が作られたときに eventSource へ自分を入れる
+      if (condition.event && !this.isEventDone(condition.event)) return false;
 
       var ids = this._conditionIds(condition, gameData);
       if (ids.length === 0) return true;
 
       var need = this._requiredCount(condition, ids.length);
       return this._countCleared(ids, cleared) >= need;
+    },
+
+    /** 出来事を済ませたか（条件の event。Game が eventSource に入る。無いとき＝開発用の道具では済んでいない扱い） */
+    eventSource: null,
+    isEventDone: function (eventId) {
+      var src = this.eventSource;
+      return !!(src && src.isEventDone && src.isEventDone(eventId));
+    },
+
+    /** 条件の出来事がまだなら、その名前（「クロニクル杯の予選」）。済んでいれば・出来事の条件でなければ null */
+    pendingEventName: function (condition) {
+      if (!condition || !condition.event || this.isEventDone(condition.event)) return null;
+      return condition.eventName || condition.event;
     },
 
     /** 条件が指しているダンジョンidを並べる */
@@ -238,7 +254,7 @@
                                    : species[i].drops) || [];
         for (var j = 0; j < drops.length; j++) {
           var id = drops[j].item;
-          // 技の書（v1.6.0）は並べない（69冊あり、どの穴にも散らしてある。図鑑の持ち物で見る）
+          // 技の書（v1.6.0）は並べない（62冊あり、どの穴にも散らしてある。図鑑の持ち物で見る）
           if (drops[j].fromBook) continue;
           if (seen[id] || !items[id]) continue;
           seen[id] = true;

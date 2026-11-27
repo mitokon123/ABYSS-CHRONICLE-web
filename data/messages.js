@@ -47,11 +47,12 @@
       //   技の言い回しがあれば「言い回し＋ modifierStatLine」、無ければ modifierStat の1文
       modifierStat:     "{target} の {stats}",                 // target, stats
       modifierStatLine: "{nouns}が {verb}!",                  // nouns（攻撃と防御）, verb
-      logStats: { hp: "HP", attack: "攻撃", defense: "防御", speed: "素早さ", pp: "PP", accuracy: "命中",
+      logStats: { hp: "HP", attack: "攻撃", defense: "防御", speed: "素早さ", pp: "PP", accuracy: "命中", evasion: "回避",
                   damageTaken: "受けるダメージ", damageDealt: "与えるダメージ",
                   resist: "{what}への耐性", allStatus: "状態異常" },
-      // ×1.5 以上・×0.5 以下は「大きく」
-      logChange: { up: "上がった", upBig: "大きく上がった", down: "下がった", downBig: "大きく下がった",
+      // ×1.5 以上・×0.5 以下は「大きく」。×2.0 以上は「大幅に」（v1.8.0・作者の指定）
+      logChange: { up: "上がった", upBig: "大きく上がった", upHuge: "大幅に上がった",
+                   down: "下がった", downBig: "大きく下がった",
                    more: "増えた", less: "減った" },
       nounJoin: "と",
 
@@ -102,6 +103,23 @@
       ppDamageNone: "しかし {target} の PPは もう残っていない", // target
       dispel:       "{target} の 強化が すべて 消えた!",        // target（波さらい。v1.8.0）
       dispelNone:   "しかし {target} には 消せる強化が なかった", // target
+      // v1.8.0 の技（2026-11-25 作者が確認表で確かめた文）
+      dispelGroup:   "{target}たち の 強化が すべて 消えた!",      // 全体で2体以上（黄昏の風・万雷轟天）
+      dispelNoneAll: "しかし 消せる強化が なかった",               // 全体で誰にも無かった（黄昏の風）
+      critMiss:      "しかし あたらなかった!",                     // 会心斬りでクリティカルでなかった
+      healedAll:     "{target} の HPが すべて 回復した!",          // 全快（キュアリス）
+      groupHealedAll: "{target}たち の HPが すべて 回復した!",     // 全員が全快（キュアリスオール）
+      multiHeal:     "{hits}回 舞って {list} 回復した!",           // ハッスルダンス（hits, list）
+      multiHealPart: "{target} {amount}",
+      guard:         "{target} は {ally} の前に立った!",           // かばう（ターンの頭）
+      guardCover:    "{target} が {ally} を かばった!",            // かばう（攻撃を受けたとき）
+      reflect:       "{target} は {skill}を はね返した!",          // 反射（リフレクト・リバーサル。v1.8.0）
+      ppShare:       "{actor} は {target} に PPを {amount} 分け与えた!",
+      ppShareEmpty:  "しかし {actor} には 分けるPPが ない",
+      ppShareFull:   "しかし {target} の PPは いっぱいだ",
+      cleanse:       "{target} の 弱体が すべて 消えた!",          // リフレッシュ
+      cleanseNone:   "しかし {target} には 消せる弱体が なかった",
+      slipDamage:    "{target} は {name}で {amount} のダメージ",   // 裂傷（ターンの終わり）
 
       // 戦闘中に働く特性（data/abilities.js の regen / counterStatus / drain / firstStrike / undying）。
       //   abilityTriggered … 特性が働いた合図（先手・脱皮など）。
@@ -109,9 +127,11 @@
       abilityTriggered: "{target} の {ability}!",             // target, ability
       abilityRegen:     "{target} は {ability}で HPが {amount} 回復した", // target, ability, amount
       abilityPpRegen:   "{target} は {ability}で PPが {amount} 戻った",   // target, ability, amount（ppRegen。2026-11-10）
+      abilityGrowStat:  "{target} は {ability}で {stat}が 上がった",     // target, ability, stat（育つ石。v1.8.0）
       abilityDrain:     "{target} は {ability}で HPを {amount} 吸い取った", // target, ability, amount
       undying:          "{target} は {ability}で 踏みとどまった!", // target, ability
       undyingEnd:       "{target} の魂が 尽きた…",              // target
+      endure:           "{target} は HP1で 踏みとどまった!",     // target（特性の名前は札に出る。しぶとい。v1.8.0）
       // 加護の「先手」は全員に掛かるので、ターンの頭に1行でまとめて出す
       partyFirstStrike: "{ability}の加護で 仲間が先に動く!",   // ability
       // v1.0.0。追い風（最初の数ターン素早さが上がる）・芽吹き（仲間の状態異常を1回防ぐ）
@@ -197,10 +217,23 @@
     battleUi: {
       // 画面上部の発動の札（強化・弱体・特性・加護が働いたとき）
       popupStatUp:   "{stat}上昇",                              // stat
+      popupStatBigUp: "{stat}大幅上昇",                         // ×2.0 以上（v1.8.0・作者の指定）
       popupStatDown: "{stat}低下",                              // stat
       popupDispel:   "強化解除",                                // 波さらいで強化が消えた（v1.8.0）
+      popupCleanse:  "弱体解除",                                // リフレッシュで弱体が消えた（v1.8.0）
+      popupGuard:    "ダメージ引き受け",                        // かばう（v1.8.0）
+      popupReflect: "はね返した",                       // 反射（リフレクト・リバーサル。v1.8.0）
       popupStats:    { hp: "HP", attack: "攻撃力", defense: "防御力", speed: "素早さ", pp: "PP",
-                       accuracy: "命中", other: "能力" },
+                       accuracy: "命中率", other: "能力" },
+      // 特性・装備・加護の札は「名前：働き」（「再生：HP自動回復」。v1.8.0・作者が案Cを選んだ）。
+      // 働きは効果の種類（data/abilities.js の type）ごと。ここに無い種類は名前だけ出す
+      popupWorkFormat: "{name}：{work}",
+      popupWork: {
+        firstStrike: "先制行動", regen: "HP自動回復", ppRegen: "PP自動回復", drain: "HP吸収",
+        counterStatus: "状態異常付与", onHitStatus: "状態異常付与", counterModifier: "弱体付与",
+        shedStatus: "状態異常回復", tailwind: "素早さ上昇", wardAlly: "状態異常1度無効", undying: "亡者",
+        growingStat: "防御力上昇", endure: "HP1で耐えた"
+      },
       popupPartyAll: "仲間全員",
       popupEnemyAll: "敵全員",
       popupEnemyPrefix: "敵の",   // 札の持ち主が敵のとき、名前の前に付ける
@@ -253,6 +286,7 @@
       noItems:     "使える道具がない",
       notEnoughPp: "PPが足りない!",
       noReviveTarget: "倒れた仲間がいない",
+      noOtherAlly: "ほかに 仲間が いない",   // かばう・分け与え（自分は選べない。v1.8.0）
 
       // 掛かっている強化・弱体の印は絵で出す（data/ui.js の icons、data/sprites_icons.js）
 
@@ -305,6 +339,20 @@
       volumeNote:    "タイトルの音量です。ファイルを選ぶと、そのファイルの音量になります。",
       volumeHint:    "↑↓: 選択    ←→: 変更    Esc: 閉じる",
       volumeClose:   "閉じる",
+      // 更新のお知らせ（v1.8.0。作者の指定）。締めた版を初めて開いたときにタイトルで出る窓
+      updateHeading:   "バージョン {version} に更新しました",   // version
+      updateSummary:   "「{summary}」  {date}",                   // summary / date（data/patchnotes.js）
+      updatePickup:    "主な内容",
+      updateSince:     "前に遊んだ {version} からの変更も、パッチノートで読めます。",   // version
+      updateMore:      "ほかの変更は、右下のパッチノートで見られます。",
+      updateOpenNotes: "パッチノートを見る",
+      updateClose:     "閉じる",
+      // パッチノートを初めて開くときの確かめ（v1.8.0。作者の指定「ネタバレ注意だから、一番最初に開くときに断りを」）
+      spoilerHeading:  "パッチノートを開く前に",
+      spoilerLines:    ["パッチノートには、この先の穴や物語の", "ネタバレがふくまれています。",
+                        "ネタバレの見出しは、閉じたまま始まります。", "", "開きますか？"],
+      spoilerYes:      "はい",
+      spoilerNo:       "いいえ",
       // メニューの下の1行（v1.4.0）。保存した日時がいちばん新しいファイル。{time} はプレイ時間
       lastPlayed: "前回：スロット{slot}  {name}  ・  {time}",
       hint:     "↑↓: 選択    決定: Enter / Space / Z",
@@ -717,6 +765,7 @@
       filterElement: "書・{name}",               // name（技の書の属性。v1.6.0）
       // 数字の左右に ◀▶ が出ているので、左右が1個ずつ・上下がまとめて
       hintQuantity: "←→: 1個ずつ    ↑↓: 10個ずつ    決定: 確認へ    Esc: やめる",
+      quantityOk:   "決定",   // 個数の窓の下の押せるボタン（v1.8.0。スマホで押せるように）
       hintConfirm:  "↑↓: 選択    決定: 決定    Esc: 個数へ戻る"
     },
 
@@ -757,7 +806,8 @@
       afterGold:    "作ったあとの所持金 {amount}G",          // amount
       afterOwned:   "所持 {from} → {to}",                    // from, to
       confirmCraft: "{name}を {count}個 作りますか?",        // name, count
-      hintQuantity: "←→: 1回ずつ    ↑↓: 10回ずつ    決定: 確認へ    Esc: やめる"
+      hintQuantity: "←→: 1回ずつ    ↑↓: 10回ずつ    決定: 確認へ    Esc: やめる",
+      quantityOk:   "決定"    // 作る回数の窓の下の押せるボタン（v1.8.0。スマホで押せるように）
     },
 
     /** 加護を選ぶ画面（拠点） */
@@ -960,6 +1010,9 @@
       accuracyLabel:"命中",
       // 使う回復の技の回復量の倍率（healDealt。粘晶のネックレス）。「回復の技 ×1.2」と出る
       healDealtLabel: "回復の技",
+      healReceivedLabel: "受ける回復",                         // 焦熱（v1.8.0）
+      evasionLabel: "回避率",                                  // 陽炎の舞（v1.8.0）
+      effectSlipDamage: "毎ターン {min}〜{max} のダメージ",      // 裂傷（v1.8.0）
       criticalLabel:"クリティカル",
       knownLabel:   "判明",
       unknownName:  "???",
@@ -1036,6 +1089,7 @@
       cleared:    "クリア済",
       locked:     "未開放",
       lockedHint: "{name} をクリアすると挑める", // name
+      eventLockedHint: "{name} を勝ち抜くと挑める", // name（出来事で開く区画。v1.8.0）
       // まだ開放されていない場所は、名前も雰囲気も伏せる
       unknownName: "？？？",
       monstersLabel:"出現するモンスター",
@@ -1067,6 +1121,7 @@
       regionHint:       "↑↓: 選択   決定: 区画を選ぶ{extra}   Esc: 戻る",
       regionProgress:   "{cleared}/{total} 区画",               // cleared, total
       regionLockedHint: "{region} の主を{count}体記録すると開く", // region, count
+      eventLockedHint: "{name} を勝ち抜くと開く", // name（出来事で開く穴。v1.8.0）
       sectionsLabel:    "区画",
       comingSoon:       "準備中",
       comingSoonHint:   "この穴の区画は、まだ準備中。",
@@ -1262,6 +1317,8 @@
       forgetNo:         "やめる",
       forgot:           "{name} は {skill} を忘れた",          // name, skill
       bookSkillMark:    "（書）",                             // 様子を見るの技の欄で、書で覚えた技の後ろ（特性も同じ）
+      bookAbilityMarkScaled: "（書・効き目{percent}%）",      // percent。書の2つ目・3つ目で弱めた特性（v1.8.0）
+      bookAbilityScale: "この枠では効き目 {percent}%",          // percent。書の画面の特性の説明（v1.8.0。2つ目 70%・3つ目 50%）
       // 特性の書で付けた特性を外す（v1.6.0）。もとの特性は外せない
       removeAbilityTitle:  "{name} の {ability} を外しますか?",   // name, ability
       removeAbilityBody:   "書で付けた特性は、もう一度 書を読むまで戻らない",
@@ -1286,7 +1343,7 @@
       bookStatusSwap:    "入れ替えられる",
       bookCompareNext:   "読ませたら",
       bookCompareHintSkill:   "決定で書を選ぶ。読ませると書は1冊なくなる。書の技は3つまで",
-      bookCompareHintAbility: "決定で書を選ぶ。読ませると書は1冊なくなる。特性の枠は Lv32・Lv45 で開く",
+      bookCompareHintAbility: "決定で書を選ぶ。読ませると書は1冊なくなる。特性の枠は Lv32・Lv45 で開く。上の枠は効き目70%、下の枠は50%",
       bookReplaceTitle:  "{old} を {new} に入れ替えますか?",   // old, new
       bookReplaceNote:   "{item} を1冊使う",                     // item
       bookReplaceYes:    "入れ替える",

@@ -1545,7 +1545,7 @@
    * 技・特性の中身の行（下の見比べに出す）。
    * 技：属性の絵と名前・属性／種類／相手・威力／PP／命中・説明。特性：名前・分類・説明
    */
-  PartyScene.prototype._bookDetailLines = function (kind, id, maxW) {
+  PartyScene.prototype._bookDetailLines = function (kind, id, maxW, slotN) {
     var data = this.game.data;
     var t = this.theme;
     var dex = (data.messages || {}).dex || {};
@@ -1559,6 +1559,11 @@
       lines.push({ text: ability.name, color: t.textColor, font: t.font });
       var category = (((data.categories || {}).ability) || {})[ability.category];
       if (category) lines.push({ text: category.name, color: category.color || t.subTextColor });
+      // この枠での効き目（v1.8.0。書の2つ目は 70%・3つ目は 50%。補正しない特性は出さない）
+      if (typeof slotN === "number") {
+        var scale = this._abilitySys().bookScale(id, slotN);
+        if (scale < 1) lines.push({ text: fill(this.texts.bookAbilityScale || "", { percent: Math.round(scale * 100) }), color: t.cursorColor });
+      }
       description = ability.description || "";
     } else {
       var skill = data.getSkill(id);
@@ -1619,7 +1624,7 @@
     } else if (!slot.id) {
       this.panel.drawText(this.texts.equipCompareEmpty || "-", colA, firstY, { color: t.hintColor });
     } else {
-      drawLines(this._bookDetailLines(slot.kind, slot.id, widthA), colA, firstY, widthA);
+      drawLines(this._bookDetailLines(slot.kind, slot.id, widthA, slot.n), colA, firstY, widthA);
     }
 
     // 中：読ませる書（候補を選んでいるときだけ）
@@ -1642,7 +1647,7 @@
       }
     } else {
       newId = bookIdOf(this.game.data.getItem(row.itemId));
-      drawLines(this._bookDetailLines(slot.kind, newId, widthB), colB, firstY, widthB);
+      drawLines(this._bookDetailLines(slot.kind, newId, widthB, slot.n), colB, firstY, widthB);
     }
 
     // 右：特性の枠だけ、ステータス（候補を選んでいれば 前 → 後）。特性で最大HPなどが変わるため
@@ -3961,13 +3966,22 @@
   /** そのモンスターが実際に持っている特性の定義を並べる（1体あたりの上限を反映） */
   /** 書で付けた特性の後ろに付ける印「（書）」（v1.6.0）。種族の特性には付けない */
   PartyScene.prototype._bookAbilityMark = function (monster, ability) {
-    return (monster && monster.isBookAbility && ability && monster.isBookAbility(ability.id)) ? (this.texts.bookSkillMark || "") : "";
+    if (!(monster && monster.isBookAbility && ability && monster.isBookAbility(ability.id))) return "";
+    // 弱めた特性（v1.8.0）は「（書・効き目70%）」
+    if (ability.bookScale && ability.bookScale < 1) {
+      return fill(this.texts.bookAbilityMarkScaled || this.texts.bookSkillMark || "", { percent: Math.round(ability.bookScale * 100) });
+    }
+    return this.texts.bookSkillMark || "";
+  };
+
+  PartyScene.prototype._abilitySys = function () {
+    if (!this._abilitySystem) this._abilitySystem = new NS.AbilitySystem(this.game.data);
+    return this._abilitySystem;
   };
 
   PartyScene.prototype._getAbilities = function (monster) {
     if (!NS.AbilitySystem) return [];
-    if (!this._abilitySystem) this._abilitySystem = new NS.AbilitySystem(this.game.data);
-    return this._abilitySystem.getAbilities(monster);
+    return this._abilitySys().getAbilities(monster);
   };
 
   NS.PartyScene = PartyScene;

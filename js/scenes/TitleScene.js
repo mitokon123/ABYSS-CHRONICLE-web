@@ -26,6 +26,20 @@
  *   項目は data/settings.js の titleVolume.items（作者「表面は設定、中身は全体音量だけ」）。
  *   ここで決めた音量はタイトル専用に覚える（SettingsManager.saveTitleVolume。閉じたときに書く）。
  *
+ * ▼ v1.8.0 更新のお知らせ（作者の指定 2026-11-24「更新があったら（バージョンを締めるたび）ポップアップが表示され、
+ *   ピックアップの内容などを少し表示、残りは右下のパッチノートを確認」）
+ *   締めた版（data/patchnotes.js の summary が devSummary「開発中」でない版）を、この端末で初めて開いたとき、
+ *   明転のあとに窓を出す。中身は版の pickup（無ければ「追加」の先頭3件）と、右下のパッチノートへの案内。
+ *   見た版はこの端末に覚える（localStorage の SEEN_VERSION_KEY。セーブファイルには書かない）。
+ *   初めて遊ぶ人（セーブも覚えた版も無い）には出さず、いまの版を覚えるだけ。
+ *
+ * ▼ v1.8.0 パッチノートの断り（作者の指定 2026-11-25「パッチノートはネタバレ注意だから、
+ *   一番最初に開くときに断りをいれよう、はいいいえを選ばせよう」）
+ *   パッチノートを開こうとすると（右下のアイコン・更新のお知らせの「パッチノートを見る」）、
+ *   この端末で一度も「はい」を選んでいなければ、ネタバレの断りと はい／いいえ を出す（既定は いいえ）。
+ *   「はい」で開き、この端末に覚えて次からは聞かない（localStorage の SPOILER_OK_KEY。セーブには書かない）。
+ *   「いいえ」・Esc は閉じるだけで、次に開くときにまた聞く。
+ *
  * 配置・配色は data/ui.js の title、文言は data/messages.js の title で管理する。
  * ゲーム名と世界名は data/config.js から取得する。
  */
@@ -33,6 +47,24 @@
   "use strict";
 
   var NOTICE_DURATION = 1800; // 通知を表示しておく時間（ms）
+  // 更新のお知らせで「もう見た」版を覚える場所（v1.8.0）。端末ごと。セーブのキーとは別
+  var SEEN_VERSION_KEY = "abyss-chronicle.seenVersion";
+  // パッチノートのネタバレの断りに「はい」と答えたか（v1.8.0）。端末ごと
+  var SPOILER_OK_KEY = "abyss-chronicle.patchSpoilerOk";
+
+  function readSpoilerOk() {
+    try { return !!(window.localStorage && window.localStorage.getItem(SPOILER_OK_KEY)); } catch (e) { return false; }
+  }
+  function writeSpoilerOk() {
+    try { if (window.localStorage) window.localStorage.setItem(SPOILER_OK_KEY, "1"); } catch (e) { /* 覚えられなければ次も聞く */ }
+  }
+
+  function readSeenVersion() {
+    try { return window.localStorage ? window.localStorage.getItem(SEEN_VERSION_KEY) : null; } catch (e) { return null; }
+  }
+  function writeSeenVersion(version) {
+    try { if (window.localStorage) window.localStorage.setItem(SEEN_VERSION_KEY, version); } catch (e) { /* 覚えられなくても遊べる */ }
+  }
 
   function TitleScene(game) {
     this.game = game;
@@ -135,6 +167,12 @@
     }
 
     this.notice.update(dt);
+
+    // 更新のお知らせ（v1.8.0）。明転が終わってから1度だけ調べ、出ている間はほかを押せない
+    if (!this._updateChecked && this._introProgress() >= 1) this._prepareUpdateNote();
+    // パッチノートの断り（v1.8.0）。出ている間はほかを押せない
+    if (this._spoiler) { this._updateSpoiler(); return; }
+    if (this._update) { this._updateUpdateNote(); return; }
 
     // 音量の窓が出ている間は、ほかを押せない（v1.7.0）
     if (this._volume) { this._updateVolume(); return; }
@@ -384,9 +422,324 @@
     if (!NS.Panel.containsPoint(rect, pointer)) return;
 
     this._patchHovered = true;
-    if (pointer.clicked) {
-      this.game.scenes.change(new NS.PatchNoteScene(this.game, this));
+    if (pointer.clicked) this._openPatchNotes();
+  };
+
+  // --- パッチノートの断り（v1.8.0。作者の指定 2026-11-25） ---
+
+  /** パッチノートを開く。この端末で一度も「はい」を選んでいなければ、先に断りを出す */
+  TitleScene.prototype._openPatchNotes = function () {
+    if (!readSpoilerOk()) { this._spoiler = { index: 1 }; return; }   // 既定は「いいえ」
+    this.game.scenes.change(new NS.PatchNoteScene(this.game, this));
+  };
+
+  TitleScene.prototype._answerSpoiler = function (yes) {
+    this._spoiler = null;
+    if (!yes) return;
+    writeSpoilerOk();
+    this.game.scenes.change(new NS.PatchNoteScene(this.game, this));
+  };
+
+  TitleScene.prototype._spoilerRect = function () {
+    var S = this.layout.spoilerBox || {};
+    var lines = this.texts.spoilerLines || [];
+    var h = (S.headHeight || 58) + (S.lineHeight || 22) * lines.length + (S.footHeight || 64);
+    var w = S.w || 460;
+    var cw = this.game.canvas.width, ch = this.game.canvas.height;
+    return { x: Math.round((cw - w) / 2), y: Math.max(12, Math.round((ch - h) / 2) - (S.lift || 16)), w: w, h: h };
+  };
+
+  /** 下の2つのボタン（左：はい・右：いいえ） */
+  TitleScene.prototype._spoilerButtons = function () {
+    var S = this.layout.spoilerBox || {}, B = S.buttons || { w: 120, h: 30, gap: 28 };
+    var box = this._spoilerRect();
+    var y = box.y + box.h - (S.padding || 18) - B.h;
+    var x = box.x + Math.round((box.w - (B.w * 2 + B.gap)) / 2);
+    return [
+      new NS.TextButton(this.panel, { x: x, y: y, w: B.w, h: B.h }, this.texts.spoilerYes || ""),
+      new NS.TextButton(this.panel, { x: x + B.w + B.gap, y: y, w: B.w, h: B.h }, this.texts.spoilerNo || "")
+    ];
+  };
+
+  TitleScene.prototype._updateSpoiler = function () {
+    var input = this.game.input, sp = this._spoiler;
+    if (input.isPressed("cancel")) { this._answerSpoiler(false); return; }
+    if (input.isPressed("left") || input.isPressed("up")) sp.index = 0;
+    if (input.isPressed("right") || input.isPressed("down")) sp.index = 1;
+    if (input.isPressed("confirm")) { this._answerSpoiler(sp.index === 0); return; }
+    var buttons = this._spoilerButtons();
+    for (var i = 0; i < buttons.length; i++) {
+      var pressed = buttons[i].handleInput(input);
+      if (buttons[i].hovered) sp.index = i;
+      if (pressed) { this._answerSpoiler(i === 0); return; }
     }
+  };
+
+  TitleScene.prototype._renderSpoiler = function (ctx) {
+    var sp = this._spoiler;
+    if (!sp) return;
+    var S = this.layout.spoilerBox || {}, t = this.theme;
+    var box = this._spoilerRect();
+    var pad = S.padding || 18, lh = S.lineHeight || 22;
+    var x = box.x + pad;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, this.game.canvas.width, this.game.canvas.height);
+    ctx.fillStyle = S.background || "#0d1220";
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.restore();
+    this.panel.drawBox(box);
+
+    var y = box.y + pad + 20;
+    this.panel.drawText(this.texts.spoilerHeading || "", x, y, { font: S.headingFont || "18px monospace", color: t.cursorColor });
+    y = box.y + (S.headHeight || 58);
+    var lines = this.texts.spoilerLines || [];
+    for (var i = 0; i < lines.length; i++) {
+      y += lh;
+      if (lines[i]) this.panel.drawText(lines[i], x + 4, y, { color: t.textColor });
+    }
+    var buttons = this._spoilerButtons();
+    for (var b = 0; b < buttons.length; b++) {
+      buttons[b].hovered = (b === sp.index);
+      buttons[b].render();
+    }
+  };
+
+  // --- 更新のお知らせ（v1.8.0。作者の指定 2026-11-24） ---
+
+  /** 出すかどうかを決めて、出すなら中身を組む（タイトルを開いて最初の1回だけ） */
+  TitleScene.prototype._prepareUpdateNote = function () {
+    this._updateChecked = true;
+    var current = (this.game.data.config || {}).version;
+    var notes = this.game.data.patchnotes || {};
+    var note = TitleScene.findVersionNote(notes, current);
+    // 作っている途中の版（summary が「開発中」）では出さない。締めたときに出る
+    if (!note || note.summary === (notes.devSummary || "開発中")) return;
+
+    var seen = readSeenVersion();
+    if (seen === current) return;
+    // 初めて遊ぶ人には出さない（更新ではないので）。いまの版を覚えるだけ
+    if (seen === null && !this._hasAnySave()) { writeSeenVersion(current); return; }
+
+    this._update = {
+      note: note,
+      // 間の版を飛ばしてきた人にだけ「前に遊んだ版からの変更も」と添える（すぐ前の版なら要らない）
+      since: TitleScene.skippedSince(notes, current, seen),
+      lines: this._updateLines(note),
+      index: 1   // 0＝パッチノートを見る・1＝閉じる
+    };
+  };
+
+  /** 前に見た版と今の版のあいだに、ほかの版があるなら前に見た版を返す（無ければ null） */
+  TitleScene.skippedSince = function (notes, current, seen) {
+    if (!seen || seen === current) return null;
+    var list = (notes && notes.versions) || [], ci = -1, si = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].version === current) ci = i;
+      if (list[i].version === seen) si = i;
+    }
+    if (ci < 0) return null;
+    if (si < 0) return seen;          // 一覧に無い古い版（名前を変える前の版など）
+    return (si - ci > 1) ? seen : null;
+  };
+
+  /** patchnotes の中から、その版の欄 */
+  TitleScene.findVersionNote = function (notes, version) {
+    var list = (notes && notes.versions) || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].version === version) return list[i];
+    }
+    return null;
+  };
+
+  /**
+   * お知らせに出す「主な内容」（v1.8.0）。版に pickup（文の並び）があればそれ、
+   * 無ければ「追加」の先頭から3件（ネタバレの見出しの中は使わない）
+   */
+  TitleScene.pickupOf = function (note, max) {
+    max = max || 3;
+    if (note && note.pickup && note.pickup.length) return note.pickup.slice(0, max);
+    var out = [], spoiler = false, entries = (note && note.entries) || [];
+    for (var i = 0; i < entries.length && out.length < max; i++) {
+      var e = entries[i];
+      if (e.section !== undefined) { spoiler = !!e.spoiler; continue; }
+      if (!spoiler && e.type === "added" && e.text) out.push(e.text);
+    }
+    return out;
+  };
+
+  /** 主な内容を、窓の幅で折り返した行の並びにする（頭に「・」、続きの行は1字下げる） */
+  TitleScene.prototype._updateLines = function (note) {
+    var U = this.layout.updateBox || {};
+    var per = U.charsPerLine || 32, maxLines = U.maxLines || 9;
+    var picks = TitleScene.pickupOf(note, U.maxPickup || 3);
+    var lines = [];
+    for (var i = 0; i < picks.length; i++) {
+      var wrapped = NS.wrapText(picks[i], per - 1);
+      for (var j = 0; j < wrapped.length; j++) lines.push((j === 0 ? "・" : "　") + wrapped[j]);
+    }
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[maxLines - 1] += "…";
+    }
+    return lines;
+  };
+
+  /** この端末にセーブがあるか（中断も含む） */
+  TitleScene.prototype._hasAnySave = function () {
+    try {
+      if (this.saveManager.hasAnySuspend()) return true;
+      var list = this.saveManager.peekAll();
+      for (var i = 0; i < list.length; i++) if (list[i].exists) return true;
+    } catch (e) { return true; }   // 調べられないときは「遊んだことがある」に倒す（出すほうが害が少ない）
+    return false;
+  };
+
+  /** 見たことにして閉じる */
+  TitleScene.prototype._closeUpdateNote = function () {
+    writeSeenVersion((this.game.data.config || {}).version);
+    this._update = null;
+  };
+
+  TitleScene.prototype._openPatchNotesFromUpdate = function () {
+    this._closeUpdateNote();
+    this._openPatchNotes();   // 初めてならネタバレの断りから（v1.8.0）
+  };
+
+  /** 窓の大きさ。行の数で高さが変わるので、毎回組む */
+  TitleScene.prototype._updateRect = function () {
+    var U = this.layout.updateBox || {}, upd = this._update;
+    var lh = U.lineHeight || 22;
+    var h = (U.headHeight || 92) + lh * upd.lines.length + (upd.since ? lh : 0) + (U.footHeight || 96);
+    var w = U.w || 520;
+    var cw = this.game.canvas.width, ch = this.game.canvas.height;
+    return { x: Math.round((cw - w) / 2), y: Math.max(12, Math.round((ch - h) / 2) - (U.lift || 20)), w: w, h: h };
+  };
+
+  /** 下の2つのボタン（左：パッチノートを見る・右：閉じる） */
+  TitleScene.prototype._updateButtons = function () {
+    var U = this.layout.updateBox || {}, B = U.buttons || { w: 168, h: 30, gap: 16 };
+    var box = this._updateRect();
+    var y = box.y + box.h - (U.padding || 18) - B.h;
+    var total = B.w * 2 + B.gap;
+    var x = box.x + Math.round((box.w - total) / 2);
+    return [
+      new NS.TextButton(this.panel, { x: x, y: y, w: B.w, h: B.h }, this.texts.updateOpenNotes || ""),
+      new NS.TextButton(this.panel, { x: x + B.w + B.gap, y: y, w: B.w, h: B.h }, this.texts.updateClose || "")
+    ];
+  };
+
+  TitleScene.prototype._updateUpdateNote = function () {
+    var input = this.game.input, upd = this._update;
+    if (input.isPressed("cancel")) { this._closeUpdateNote(); return; }
+    if (input.isPressed("left") || input.isPressed("up")) upd.index = 0;
+    if (input.isPressed("right") || input.isPressed("down")) upd.index = 1;
+    if (input.isPressed("confirm")) {
+      if (upd.index === 0) this._openPatchNotesFromUpdate();
+      else this._closeUpdateNote();
+      return;
+    }
+
+    var buttons = this._updateButtons();
+    for (var i = 0; i < buttons.length; i++) {
+      var pressed = buttons[i].handleInput(input);
+      if (buttons[i].hovered) upd.index = i;
+      if (!pressed) continue;
+      if (i === 0) this._openPatchNotesFromUpdate();
+      else this._closeUpdateNote();
+      return;
+    }
+    // 右下のパッチノートのアイコンを押しても開く（案内の矢印が指している先）
+    var rect = this._patchRect(), pointer = input.getPointer ? input.getPointer() : null;
+    if (rect && pointer && pointer.clicked && NS.Panel.containsPoint(rect, pointer)) this._openPatchNotesFromUpdate();
+  };
+
+  TitleScene.prototype._renderUpdateNote = function (ctx) {
+    var upd = this._update;
+    if (!upd) return;
+    var U = this.layout.updateBox || {}, t = this.theme;
+    var box = this._updateRect();
+    var origin = this.panel.innerOrigin(box);
+    var pad = U.padding || 18, lh = U.lineHeight || 22;
+    var x = box.x + pad;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, this.game.canvas.width, this.game.canvas.height);
+    ctx.fillStyle = U.background || "#0d1220";
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.restore();
+    this.panel.drawBox(box);
+
+    var note = upd.note;
+    var y = box.y + pad + 20;
+    this.panel.drawText((this.texts.updateHeading || "").replace("{version}", note.version), x, y,
+      { font: U.headingFont || "18px monospace", color: t.cursorColor });
+    y += 24;
+    var sub = (this.texts.updateSummary || "").replace("{summary}", note.summary || "").replace("{date}", note.date || "");
+    this.panel.drawText(sub, x, y, { font: t.smallFont, color: t.subTextColor });
+    y += 30;
+    this.panel.drawText(this.texts.updatePickup || "", x, y, { color: U.pickupColor || "#7fd0ff" });
+
+    for (var i = 0; i < upd.lines.length; i++) {
+      y += lh;
+      this.panel.drawText(upd.lines[i], x + 4, y, { color: t.textColor });
+    }
+    if (upd.since) {
+      y += lh;
+      this.panel.drawText((this.texts.updateSince || "").replace("{version}", upd.since), x + 4, y,
+        { font: t.smallFont, color: t.subTextColor });
+    }
+
+    // 残りはパッチノートで：文の右から、右下のアイコンへ矢印を引く
+    y += lh + 10;
+    var more = this.texts.updateMore || "";
+    this.panel.drawText(more, x, y, { color: t.cursorColor });
+    this._renderUpdateArrow(ctx, box, y);
+
+    var buttons = this._updateButtons();
+    for (var b = 0; b < buttons.length; b++) {
+      buttons[b].hovered = (b === upd.index);
+      buttons[b].render();
+    }
+  };
+
+  /** 窓の右下から、パッチノートのアイコンへ伸びる矢印。アイコンは暗くせず、明滅する輪で囲む */
+  TitleScene.prototype._renderUpdateArrow = function (ctx, box, textY) {
+    var rect = this._patchRect();
+    if (!rect) return;
+    var color = this.theme.cursorColor || "#ffd75e";
+    var cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    var fromX = box.x + box.w - 8, fromY = textY - 5;
+    var toX = cx - 2, toY = rect.y - 8;
+
+    // アイコンは暗い幕の上にもう一度描く
+    var p = this.layout.patchButton || {};
+    this.sprites.draw(p.icon || "iconPatchNote", p.x, p.y, p.size, p.size);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.quadraticCurveTo(toX, fromY, toX, toY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(toX, toY + 2);
+    ctx.lineTo(toX - 6, toY - 8);
+    ctx.lineTo(toX + 6, toY - 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.elapsed / 220);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rect.w / 2 + 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   };
 
   TitleScene.prototype._showNotice = function (text) {
@@ -416,6 +769,8 @@
     this._renderNotice(ctx);
     this._renderFooter(ctx, w, h);
     this._renderVolume(ctx);   // 音量の窓（v1.7.0）。いちばん上に重ねる
+    this._renderUpdateNote(ctx);   // 更新のお知らせ（v1.8.0）
+    this._renderSpoiler(ctx);      // パッチノートの断り（v1.8.0）
     this._renderIntro(ctx, w, h);
   };
 

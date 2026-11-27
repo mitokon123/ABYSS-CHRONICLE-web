@@ -1510,6 +1510,85 @@
     },
 
     /**
+     * --- 涵養の穴・滴る鍾乳洞の素材（v1.8.0） ---
+     * 名前と落とす種族・確率は作者の表（2026-11-26）。説明と値段は私の案を作者が任せた（2026-11-27「おまかせ」。千年樹の根底の同じ役の品の一段上）
+     */
+    snailShell: {
+      id: "snailShell",
+      name: "巻貝の殻",
+      icon: "iconItemSnailShell",
+      from: "drippingCave",
+      category: "material",
+      description: "ミズマイマイの殻のかけら。鍾乳石のように硬く、耳に当てると水の音がする。",
+      maxStack: 999,
+      price: 140,
+      effect: null,
+      usableIn: []
+    },
+    echoPearl: {
+      id: "echoPearl",
+      name: "響きの真珠",
+      icon: "iconItemEchoPearl",
+      from: "drippingCave",
+      category: "material",
+      description: "ミズマイマイの殻の奥で育った真珠。指ではじくと、いつまでも音が響く。とても高く売れる。",
+      maxStack: 999,
+      price: 800,
+      effect: null,
+      usableIn: []
+    },
+    dropFeather: {
+      id: "dropFeather",
+      name: "雫の羽",
+      icon: "iconItemDropFeather",
+      from: "drippingCave",
+      category: "material",
+      description: "シズクドリの羽。いつも先が濡れていて、雫が落ちきることがない。",
+      maxStack: 999,
+      price: 140,
+      effect: null,
+      usableIn: []
+    },
+    stalagmiteShard: {
+      id: "stalagmiteShard",
+      name: "石筍のかけら",
+      icon: "iconItemStalagmiteShard",
+      from: "drippingCave",
+      category: "material",
+      description: "セキジュンの体から欠けた石筍。置いておくと、少しずつ伸びる。",
+      maxStack: 999,
+      price: 150,
+      effect: null,
+      usableIn: []
+    },
+    blueWolfClaw: {
+      id: "blueWolfClaw",
+      name: "蒼狼の爪",
+      icon: "iconItemBlueWolfClaw",
+      from: "drippingCave",
+      category: "material",
+      description: "ウルヴァーグの爪。水を切るように薄く、よく研がれている。",
+      maxStack: 999,
+      price: 170,
+      effect: null,
+      usableIn: []
+    },
+    // 滴る鍾乳洞の主ハンザキが落とす（必ず1つ。data/monsters.js の hanzaki の drops）。
+    // カラクリモリの琥珀の芯と同じ役・同じ値段。名前・値段は私の案を作者が確定（2026-11-27）。店では売らない・宝箱にも出ない
+    hanzakiHide: {
+      id: "hanzakiHide",
+      name: "ハンザキの粘皮",
+      icon: "iconItemHanzakiHide",
+      from: "drippingCave",
+      category: "material",
+      description: "ハンザキの体を覆う、ぬめる厚い皮。乾くことがなく、触れると傷がふさがるという。",
+      maxStack: 999,
+      price: 450,
+      effect: null,
+      usableIn: []
+    },
+
+    /**
      * --- 萌芽の穴・蔦這う回廊の素材（v1.1.0） ---
      * 値段は 2026-10-28 に作者から任されて決めた（若葉の洞の同じ役の品より 3〜4割高い。回廊は1戦のゴールドも多い）。
      * 名前・説明・絵も作者が確定（2026-10-28）。
@@ -2275,6 +2354,163 @@
           { type: "statBonus", stat: "hp", value: 22 }
         ]
       }
+    },
+
+    // --- 涵養の穴・滴る鍾乳洞（v1.8.0） ---
+
+    // ウルヴァーグが落とす（10%。作者 2026-11-27。前の表では 5%）。効き目は作者が決めた（2026-11-27：攻撃 +14・斬撃の技 ×1.10）。
+    // 斬撃は特性「剣豪」と同じ skillKind（通常攻撃には効かない）。値段・説明は私の案を作者が任せた
+    wolfFangNecklace: {
+      id: "wolfFangNecklace",
+      name: "狼牙の首飾り",
+      icon: "iconItemWolfFangNecklace",
+      category: "equipment",
+      description: "ウルヴァーグの牙をつないだ首飾り。斬りつける技が、より深く入る。",
+      maxStack: 999,
+      price: 1100,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "accessory",
+        effects: [
+          { type: "statBonus", stat: "attack", value: 14 },
+          { type: "damageDealt", value: 1.10, skillKind: "slash" }
+        ]
+      }
+    },
+    // --- 滴る鍾乳洞の素材で作る装備（v1.8.0。作者の表 2026-11-27。効き目・材料・値段は作者が直して確定。名前は私の案のまま。説明は私） ---
+    // 水の剣。轟雷の剣・焔牙の太刀と同じ形（攻撃と、その属性の技のダメージ）
+    flowingBlade: {
+      id: "flowingBlade",
+      name: "流水の刃",
+      icon: "iconItemFlowingBlade",
+      category: "equipment",
+      description: "蒼狼の爪を研ぎ合わせた刃。振るうと、刃のまわりを水が流れる。",
+      maxStack: 999,
+      price: 1400,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "weapon",
+        effects: [
+          { type: "statBonus", stat: "attack", value: 52 },
+          { type: "damageDealt", value: 1.18, element: "water" }
+        ]
+      }
+    },
+    // 攻撃がいちばん高い武器。歯車の大剣と同じく、重さの代償に素早さ ×0.9
+    stalagmiteMaul: {
+      id: "stalagmiteMaul",
+      name: "石筍の大槌",
+      icon: "iconItemStalagmiteMaul",
+      category: "equipment",
+      description: "石筍をそのまま頭にした大槌。重いが、どんな守りも打ち砕く。",
+      maxStack: 999,
+      price: 1500,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "weapon",
+        effects: [
+          { type: "statBonus", stat: "attack", value: 66 },
+          { type: "statMultiplier", stat: "speed", value: 0.9 }
+        ]
+      }
+    },
+    // 守りの鎧。水への耐性つき
+    snailShellArmor: {
+      id: "snailShellArmor",
+      name: "巻貝の鎧",
+      icon: "iconItemSnailShellArmor",
+      category: "equipment",
+      description: "巻貝の殻を重ねた鎧。硬く、水をよく弾く。",
+      maxStack: 999,
+      price: 1300,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "armor",
+        effects: [
+          { type: "statBonus", stat: "defense", value: 55 },
+          { type: "resistBonus", element: "water", value: 3 }
+        ]
+      }
+    },
+    // 軽い外套。PP が増える
+    dropFeatherCloak: {
+      id: "dropFeatherCloak",
+      name: "雫羽の外套",
+      icon: "iconItemDropFeatherCloak",
+      category: "equipment",
+      description: "雫の羽を縫い合わせた外套。羽の先の雫が、心を静かに保つ。",
+      maxStack: 999,
+      price: 1200,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "armor",
+        effects: [
+          { type: "statBonus", stat: "defense", value: 37 },
+          { type: "statBonus", stat: "pp", value: 28 },
+          { type: "resistBonus", element: "water", value: 2 }
+        ]
+      }
+    },
+    // 共鳴の技のダメージ ×1.12（ミズマイマイの絆の報酬と同じ skillKind）
+    echoEarring: {
+      id: "echoEarring",
+      name: "響きの耳飾り",
+      icon: "iconItemEchoEarring",
+      category: "equipment",
+      description: "響きの真珠をつないだ耳飾り。共鳴の響きを、いっそう大きくする。",
+      maxStack: 999,
+      price: 1600,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "accessory",
+        effects: [
+          { type: "damageDealt", value: 1.12, skillKind: "resonance" }
+        ]
+      }
+    },
+    // 水よけの札（琥珀の雷よけ札と同じ形）
+    dropWard: {
+      id: "dropWard",
+      name: "雫の水よけ札",
+      icon: "iconItemDropWard",
+      category: "equipment",
+      description: "雫の印を描いた札。水の攻めを和らげる。",
+      maxStack: 999,
+      price: 320,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "accessory",
+        effects: [
+          { type: "resistBonus", element: "water", value: 3 }
+        ]
+      }
+    },
+    // 主の素材の防具。毎ターン最大HPの4%を回復（regen）
+    hanzakiHideCoat: {
+      id: "hanzakiHideCoat",
+      name: "大鯢の皮衣",
+      icon: "iconItemHanzakiHideCoat",
+      category: "equipment",
+      description: "ハンザキの粘皮で仕立てた衣。傷を受けても、少しずつふさがっていく。",
+      maxStack: 999,
+      price: 1800,
+      effect: null,
+      usableIn: [],
+      equip: {
+        slot: "armor",
+        effects: [
+          { type: "statBonus", stat: "defense", value: 46 },
+          { type: "statBonus", stat: "hp", value: 30 },
+          { type: "regen", value: 0.04 }
+        ]
+      }
     }
   };
 
@@ -2328,13 +2564,6 @@
     ["rallyDance",      "鼓舞の舞",                "none",      4700, "scorchingFissure",  "weaponBot"],
     ["fortressForm",    "堅守の陣",                "none",      1950, "ivyCorridor",       "futabaMushi"],
     ["powerResonance",  "ハウリング",               "none",      3500, "silentDepths",      "flamin"],
-    ["wardSongFire",    "ファイアベール",             "fire",      2000, "scorchingFissure",  "magmaCrab"],
-    ["wardSongWater",   "アクアベール",              "water",     2000, "sproutHollow",      "slime"],
-    ["wardSongWind",    "ウィンドベール",             "wind",      2000, "venomMarsh",        "ashWing"],
-    ["wardSongEarth",   "ストーンベール",             "earth",     2000, "ancientRoots",      "rocky"],
-    ["wardSongThunder", "サンダーベール",             "thunder",   2500, "silentDepths",      "boltBug"],
-    ["wardSongLight",   "ライトベール",              "light",     2000, "mossyMine",         "kodama"],
-    ["wardSongDark",    "ダークベール",              "dark",      2000, "mossyMine",         "batty"],
     ["armorBreak",      "鎧くずし",                "none",      2500, "ivyCorridor",       "puddling"],
     ["slowDance",       "足止めの舞",               "none",      1500, "ancientRoots",      "kageZuta"],
     ["intimidRoar",     "威圧の咆哮",               "none",      2500, "silentDepths",      "abyssDragon"],
@@ -2367,6 +2596,21 @@
     ["deathra",         "デスラ",                 "none",      8000, "sproutHollow",      "tsurigane"]
   ];
 
+  /**
+   * なくした書（v1.8.0）。古いセーブの持ち物にあれば、読み込んだときに買値のゴールドに替える（SaveManager._read）。
+   *   〇〇ベール7つをエレメントバリアにまとめたので、ベールの書7冊をなくした（作者の仕様 2026-11-26・払い戻しは作者が選んだ）。
+   *   書で覚えていたベールは、読み込んだときに外れる（技が無いので MonsterInstance.fromSaveData が読み飛ばす）。書の枠は1つ空く
+   */
+  NS.rawData.removedItemRefunds = {
+    bookWardSongFire: 2000,   // ファイアベールの書
+    bookWardSongWater: 2000,   // アクアベールの書
+    bookWardSongWind: 2000,   // ウィンドベールの書
+    bookWardSongEarth: 2000,   // ストーンベールの書
+    bookWardSongThunder: 2500,   // サンダーベールの書
+    bookWardSongLight: 2000,   // ライトベールの書
+    bookWardSongDark: 2000   // ダークベールの書
+  };
+
   SKILL_BOOKS.forEach(function (row) {
     var id = "book" + row[0].charAt(0).toUpperCase() + row[0].slice(1);
     NS.rawData.items[id] = {
@@ -2392,41 +2636,52 @@
    * 書で付けた特性は、仲間の画面の「書の特性を外す」で外せる（書は戻らない）。もとの特性は外せない。
    * 死神（シニガミ）とカチカチ（ジュエル）は書にしない（作者の表）。
    *
-   * ▼ 手に入る所・売値は技の書と同じ（config.skillBooks の afterEvent・dropRate・chestWeight・sellPrice）
-   *   店は写本堂（小見出し「特性」）。宝箱と落とし物は GameData._mergeSkillBooks が足す（落とす種族は何体でも書ける）
+   * ▼ v1.8.0 の見直し（作者の表 game/特性の書_見直し.md 2026-11-25）
+   *   ・値段：いちばん安いものを 25000 にして、ほかも同じ割合で上げた（8000→25000・10000→31000・12000→37500・15000→47000・20000→62500）
+   *   ・店で売るのは12冊だけ（4つ目の列が true）。ほかは落とし物でだけ手に入る
+   *   ・宝箱からは出ない。その特性を持つ種族がみんな 5% で落とす（主も。シニガミとジュエルは落とさない。config.abilityBooks）
+   *   ・2つ目は効き目 70%・3つ目は 50%（config.abilityBooks.slotScales。AbilitySystem が弱める）
    *
-   * 並び：[特性id, 特性の名前, 値段, 宝箱のダンジョン, 落とす種族（主だけが持つ特性は空）]
+   * ▼ 予選のあとに出ること・売値（10G）は技の書と同じ（config.skillBooks の afterEvent・sellPrice）
+   *   店は写本堂（小見出し「特性」）。落とし物は GameData._mergeSkillBooks が足す
+   *
+   * 並び：[特性id, 特性の名前, 値段, 写本堂で売るか]
    */
   var ABILITY_BOOKS = [
-    ["tough",        "たくましい",         8000, "mossyMine",         ["slime"]],
-    ["swiftFoot",    "俊足",            8000, "ivyCorridor",       ["batty", "tsurigane"]],
-    ["guts",         "こんじょう",         8000, "mossyMine",         ["mossRat"]],
-    ["fireSoul",     "炎の魂",          10000, "scorchingFissure",  ["flamin"]],
-    ["waterHeart",   "水の心",          10000, "silentDepths",      ["puddling"]],
-    ["windFlow",     "風の流れ",         10000, "scorchingFissure",  ["ashWing"]],
-    ["earthPower",   "大地の力",         10000, "mossyMine",         ["rocky"]],
-    ["charged",      "帯電",           10000, "ivyCorridor",       ["thunderDragon"]],
-    ["glowing",      "発光",           10000, "mossyMine",         ["glowBug"]],
-    ["duskborn",     "宵闇",           10000, "silentDepths",      ["abyssDragon"]],
-    ["swordMaster",  "剣豪",           10000, "ancientRoots",      ["weaponBot"]],
-    ["thickSkin",    "厚い皮膚",         12000, "venomMarsh",        []],
-    ["hardShell",    "硬い殻",          12000, "ancientRoots",      ["magmaCrab", "mudTurtle", "kokeGame", "amberBeetle"]],
-    ["brittleShell", "ひび割れ",          8000, "scorchingFissure",  ["crackRock"]],
-    ["wildInstinct", "野生の勘",          8000, "mossyMine",         ["sporin"]],
-    ["gamble",       "ギャンブル",         8000, "ivyCorridor",       ["mossShroom"]],
-    ["kingsDignity", "王の威厳",         12000, "silentDepths",      []],
-    ["fullHunt",     "万全狩り",         12000, "sproutHollow",      []],
-    ["discharge",    "放電",           15000, "silentDepths",      ["boltBug"]],
-    ["stickyBody",   "ねばねば",         12000, "ancientRoots",      ["sapSlime"]],
-    ["poisonThorn",  "毒のとげ",          8000, "venomMarsh",        ["venomBee"]],
-    ["soulDrain",    "吸精",           15000, "silentDepths",      ["murkling"]],
-    ["firstStrike",  "先手",           15000, "scorchingFissure",  ["cinderling"]],
-    ["shedSkin",     "脱皮",           15000, "sproutHollow",      ["futabaMushi"]],
-    ["tailwind",     "追い風",          15000, "sproutHollow",      ["wakabaDori"]],
-    ["sprouting",    "芽吹き",          15000, "sproutHollow",      ["kodama"]],
-    ["regen",        "再生",           20000, "sproutHollow",      ["kageZuta", "yuraTsubomi"]],
-    ["undeadSoul",   "亡者の魂",         20000, "venomMarsh",        ["marshBone"]]
+    ["tough",        "たくましい",    25000, false],
+    ["swiftFoot",    "俊足",          25000, false],
+    ["guts",         "こんじょう",    25000, false],
+    ["fireSoul",     "炎の魂",        31000, true],
+    ["waterHeart",   "水の心",        31000, true],
+    ["windFlow",     "風の流れ",      31000, true],
+    ["earthPower",   "大地の力",      31000, true],
+    ["charged",      "帯電",          31000, true],
+    ["glowing",      "発光",          31000, true],
+    ["duskborn",     "宵闇",          31000, true],
+    ["swordMaster",  "剣豪",          31000, false],
+    ["thickSkin",    "厚い皮膚",      37500, true],
+    ["hardShell",    "硬い殻",        37500, true],
+    ["brittleShell", "ひび割れ",      25000, true],
+    ["wildInstinct", "野生の勘",      25000, true],
+    ["gamble",       "ギャンブル",    25000, true],
+    ["kingsDignity", "王の威厳",      37500, false],
+    ["fullHunt",     "万全狩り",      37500, false],
+    ["discharge",    "放電",          47000, false],
+    ["stickyBody",   "ねばねば",      37500, false],
+    ["poisonThorn",  "毒のとげ",      25000, false],
+    ["soulDrain",    "吸精",          47000, false],
+    ["firstStrike",  "先手",          47000, false],
+    ["shedSkin",     "脱皮",          47000, false],
+    ["tailwind",     "追い風",        47000, false],
+    ["sprouting",    "芽吹き",        47000, false],
+    ["regen",        "再生",          62500, false],
+    ["undeadSoul",   "亡者の魂",      62500, false],
+    // v1.8.0（作者 2026-11-27「いるけど買えない」）。値段は亡者の魂と同じにした（私の案）
+    ["tenacious",    "しぶとい",      62500, false]
   ];
+
+  // 補正しない特性（data/config.js の abilityBooks.fullStrength と同じ。説明の文を変えるためだけに写している）
+  var FULL_STRENGTH = ["tough", "swiftFoot", "guts", "gamble"];
 
   ABILITY_BOOKS.forEach(function (row) {
     var id = "abilityBook" + row[0].charAt(0).toUpperCase() + row[0].slice(1);
@@ -2435,12 +2690,14 @@
       name: "特性「" + row[1] + "」の書",
       icon: "iconItemBookAbility",
       category: "book",
-      description: "読んだ仲間が、特性「" + row[1] + "」を身につける。2つ目の特性は Lv32、3つ目は Lv45 から。",
+      description: "読んだ仲間が、特性「" + row[1] + "」を身につける。2つ目の特性は Lv32、3つ目は Lv45 から。" +
+        (FULL_STRENGTH.indexOf(row[0]) >= 0 ? "" : "書で付けた特性は、2つ目は効き目が 70%、3つ目は 50% になる。"),
       maxStack: 999,
       price: row[2],
       effect: { type: "learnAbility", ability: row[0] },
       usableIn: [],   // 仲間の画面の「書」で読ませる（v1.6.1）
-      book: { ability: row[0], chest: row[3], drop: row[4] }
+      // 落とす種族は GameData._mergeSkillBooks が「その特性を持つ種族みんな」で決める（v1.8.0）。宝箱は無し
+      book: { ability: row[0], shop: row[3] }
     };
   });
 })(window.MyGame);

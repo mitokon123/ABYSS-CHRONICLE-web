@@ -52,6 +52,7 @@
    * @param {object[]} enemies 敵
    */
   BattleSystem.prototype.start = function (allies, enemies) {
+    this._effectRolls = [];   // 確率のある「働くか働かないか」の効果のくじ（v1.8.0。_rolledOnce）
     this.allies = allies || [];
     this.enemies = enemies || [];
     this.finished = false;
@@ -88,6 +89,8 @@
       this.allies[i]._appeared = false;
       this.allies[i]._undying = false;
       this.allies[i]._undyingUsed = false;
+      this.allies[i]._endureUsed = 0;
+      this.allies[i]._endureSerial = null;
       this.allies[i]._statusWard = null;
       this.allies[i]._tacticSupportNext = 0;
       this.allies[i]._charged = null;
@@ -99,6 +102,8 @@
       this.enemies[i]._defending = false;
       this.enemies[i]._undying = false;
       this.enemies[i]._undyingUsed = false;
+      this.enemies[i]._endureUsed = 0;
+      this.enemies[i]._endureSerial = null;
       this.enemies[i]._statusWard = null;
       this.enemies[i]._charged = null;
       this.enemies[i]._chargeMul = null;
@@ -131,6 +136,9 @@
 
     this.slots[index] = incoming;
     incoming._appeared = true;   // 交代で出たぶんも「場に出た」に数える
+    // 亡者の魂で踏みとどまっていた者は、下がったところで倒れる（HP は 0）。
+    // ターンの終わりの _expireUndying は枠の中しか見ないので、ここで外さないと HP 0 のまま控えに残っていた（v1.8.0 で直した）
+    if (outgoing._undying) outgoing._undying = false;
     return true;
   };
 
@@ -199,8 +207,10 @@
     // 加護の「先手」は全員に掛かるので、1体ずつ名乗らせず、ターンの頭に1行でまとめて知らせる
     this._announcePartyFirstStrike(order, events);
 
-    // 「立ち塞がる」（cover を持つ技）は、防御と同じく素早さに関係なくターンの頭で済ませる
+    // 「立ち塞がる」（cover を持つ技）は、防御と同じく素早さに関係なくターンの頭で済ませる。
+    // 「かばう」（guard。v1.8.0）も同じくターンの頭。立ち塞がるのあと
     this._applyCovers(order, events);
+    this._applyGuards(order, events);
 
     for (var i = 0; i < order.length; i++) {
       var step = order[i];
@@ -212,7 +222,7 @@
 
       // 特性「先手」で先に動いた者は、そうと分かるように名乗る（加護のぶんは上でまとめて出した）
       if (typeof step.firstStrike === "string" && step.firstStrikeKind !== "blessing") {
-        events.push(this._abilityEvent(step.actor, step.side, step.firstStrike, step.firstStrikeKind));
+        events.push(this._abilityEvent(step.actor, step.side, step.firstStrike, step.firstStrikeKind, "firstStrike"));
       }
 
       this._performAction(step, events);
@@ -246,6 +256,10 @@
     this._tickStatuses(events);
     if (this._checkFinish(events)) return events;
 
+    // 裂傷（slipDamage。v1.8.0）。毒のあとに受ける。これで倒れることもある
+    this._tickSlipDamage(events);
+    if (this._checkFinish(events)) return events;
+
     // 特性「脱皮」。残りターンを減らしたあとに見るので、自然に解けたものは数えない
     this._tickShedStatus(events);
 
@@ -253,6 +267,8 @@
     this._tickRegen(events);
     // 毎ターンPPが戻る装備（樹液の護符・雫の指輪。ppRegen）
     this._tickPpRegen(events);
+    // 特性「育つ石」（growingStat。v1.8.0）
+    this._tickGrowingStat(events);
 
     // バフ／デバフの残りターンを1つ減らす（ターンの最後にまとめて）
     this._tickModifiers(events);
@@ -391,7 +407,9 @@
         events.push({
           type: "modifierEnd", targetSide: side,
           targetName: monster.getName(), target: monster,
-          skillName: expired[j].name
+          skillName: expired[j].name,
+          // 焦熱・裂傷は切れたときの文が別（v1.8.0）
+          endMessage: expired[j].endMessage || null
         });
       }
     }
@@ -481,6 +499,8 @@
   BattleSystem.prototype._withFirstStrike = function (step) {
     if (this.turnCount !== 1) return step;
     var found = this._findEffect(step.actor, "firstStrike");
+    // 書の2つ目・3つ目で弱めた先手は、働く確率がある（v1.8.0）。1回の戦闘で1度だけ決める
+    if (found && !this._rolledOnce(step.actor, "firstStrike", found.effect.chance)) found = null;
     if (found) {
       step.firstStrike = found.name || "";
       step.firstStrikeKind = found.kind;
@@ -501,7 +521,7 @@
       if (told[key]) continue;
       told[key] = true;
       events.push({ type: "partyFirstStrike", side: step.side, targetSide: step.side,
-        abilityName: step.firstStrike, sourceKind: "blessing" });
+        abilityName: step.firstStrike, sourceKind: "blessing", work: "firstStrike" });
     }
   };
 
@@ -528,6 +548,17 @@
     if (!spec) return 1;
     var min = Math.max(1, Math.floor(numberOr(spec.min, 1)));
     var max = Math.max(min, Math.floor(numberOr(spec.max, min)));
+    // 回数ごとの重み（weights。[min回の重み, min+1回の重み, …]。v1.8.0 ハンザキの 1回40%・2回60%）。無ければ同じ割合
+    if (Array.isArray(spec.weights) && spec.weights.length === max - min + 1) {
+      var total = 0, k;
+      for (k = 0; k < spec.weights.length; k++) total += Math.max(0, spec.weights[k]);
+      var roll = this.random.next() * total;
+      for (k = 0; k < spec.weights.length; k++) {
+        roll -= Math.max(0, spec.weights[k]);
+        if (roll < 0) return min + k;
+      }
+      return max;
+    }
     return this.random.nextInt(min, max);
   };
 
@@ -544,6 +575,9 @@
     var tieBreak = (this.data.battle || {}).speedTieBreak || "random";
     var random = this.random;
 
+    // 先手打ち（技の priority。v1.8.0）は、特性の先手と同じ組で先に動く（その中では素早さ順）
+    for (var p = 0; p < steps.length; p++) steps[p]._priority = this._priorityStep(steps[p]);
+
     // 並べ替えが安定するよう、あらかじめ同速時の順位を決めておく
     for (var i = 0; i < steps.length; i++) {
       if (tieBreak === "allyFirst") steps[i]._tie = (steps[i].side === "ally") ? 0 : 1;
@@ -553,13 +587,21 @@
 
     steps.sort(function (a, b) {
       // 特性「先手」が働いている者は、素早さに関係なく先に並ぶ（その中では素早さ順）
-      var firstA = (a.firstStrike !== null && a.firstStrike !== undefined) ? 1 : 0;
-      var firstB = (b.firstStrike !== null && b.firstStrike !== undefined) ? 1 : 0;
+      var firstA = (a.firstStrike !== null && a.firstStrike !== undefined) || a._priority ? 1 : 0;
+      var firstB = (b.firstStrike !== null && b.firstStrike !== undefined) || b._priority ? 1 : 0;
       if (firstA !== firstB) return firstB - firstA;
       if (b.speed !== a.speed) return b.speed - a.speed;
       return a._tie - b._tie;
     });
     return steps;
+  };
+
+  /** 先手打ち（priority を持つ技）を、PP が足りる状態で選んだ行動か（v1.8.0） */
+  BattleSystem.prototype._priorityStep = function (step) {
+    var action = step && step.action;
+    if (!action || action.type !== "skill") return false;
+    var skill = this.data.getSkill(action.skillId);
+    return !!(skill && skill.priority && this._canUseSkill(step.actor, action.skillId));
   };
 
   // 出る場所の表の skillWeights に書ける「必ずクリティカルの通常攻撃」（技ではない選択肢。ザンガルド）
@@ -603,8 +645,10 @@
     var skills = enemy.skills || [];
     for (var i = 0; i < skills.length; i++) {
       if (!this._canUseSkill(enemy, skills[i])) continue;
-      // 倒れた仲間を起こす技（リザレクト）は敵は使わない
-      if ((this.data.getSkill(skills[i]) || {}).revive) continue;
+      // 倒れた仲間を起こす技は、リザレクション（enemyRevive。v1.8.0 作者の指定）だけ、倒れた仲間がいるときに使う。
+      // リザレクトは敵は使わない
+      var reviveSkill = (this.data.getSkill(skills[i]) || {});
+      if (reviveSkill.revive && !(reviveSkill.enemyRevive && this._faintedEnemy())) continue;
       // すでに効いている強化・弱体は掛け直しても意味がないので選ばない
       // （重ねがけはターン数が建て直されるだけ。手番を捨てることになる）
       if (this._modifierAlreadyOn(enemy, skills[i])) continue;
@@ -629,6 +673,10 @@
     }
     var skill = this.data.getSkill(chosen);
 
+    // 倒れた仲間を起こす技（リザレクション）は、倒れた仲間へ
+    if (skill && skill.revive) {
+      return { type: "skill", skillId: chosen, target: this._faintedEnemy(), targetIndex: 0 };
+    }
     // 状態異常を治す技（クレンズ）は、治せるものが掛かっている仲間へ
     if (skill && skill.target === "ally" && skill.cureStatus && !skill.heal) {
       return { type: "skill", skillId: chosen, targetIndex: this._curableIndex(enemy, skill) };
@@ -642,6 +690,15 @@
       return { type: "skill", skillId: chosen, targetIndex: this._mostBuffedIndex(fieldAllies, target) };
     }
     return { type: "skill", skillId: chosen, targetIndex: target };
+  };
+
+  /** 倒れている敵（取り除かれていない者）の最初の1体。いなければ null（v1.8.0 リザレクション） */
+  BattleSystem.prototype._faintedEnemy = function () {
+    for (var i = 0; i < this.enemies.length; i++) {
+      var e = this.enemies[i];
+      if (e.isFainted() && !e._undying && !e._removed) return e;
+    }
+    return null;
   };
 
   /** 強化を消す技（dispel）だが、相手の誰にも強化が掛かっていないか（v1.8.0） */
@@ -887,6 +944,8 @@
       if (!this._canUseSkill(actor, list[i])) continue;
       // 立ち塞がる（cover）はターンの頭で構える技なので、番が来てからでは間に合わない
       if (skill.cover) continue;
+      // かばう・分け与えは、作戦では使わない（命令したときだけ。v1.8.0 作者の指定）
+      if (skill.guard || skill.ppShare) continue;
       // 即死の技は使わない（作者の指定）
       if (this._isInstantDeathSkill(skill)) continue;
       // 倒れた仲間を起こす技（リザレクト）は、回復や攻撃の候補とは分けて見る
@@ -896,10 +955,10 @@
 
     var picked = this._tacticRevive(revives, own, side, tactic);
     if (!picked && typeof tactic.healBelow === "number") picked = this._tacticHeal(actor, skills, own, tactic);
-    if (!picked && tactic.cure) picked = this._tacticCure(skills, own);
+    if (!picked && tactic.cure) picked = this._tacticCure(skills, own) || this._tacticCleanse(skills, own);
     // 治す役ではない作戦でも、ときどき治す（補助中心 0.5。治せる味方がいるときだけ乱数を引く。v1.5.0）
     if (!picked && !tactic.cure && typeof tactic.cureChance === "number" && tactic.cureChance > 0) {
-      var cure = this._tacticCure(skills, own);
+      var cure = this._tacticCure(skills, own) || this._tacticCleanse(skills, own);
       if (cure && this.random.next() < tactic.cureChance) picked = cure;
     }
     if (!picked && tactic.support) picked = this._tacticSupport(actor, skills, own, foes);
@@ -933,9 +992,16 @@
     return out;
   }
 
-  /** 回復の技の、だいたいの回復量（{min,max} の真ん中か amount） */
+  /** 何回か当てる技の、だいたいの回数（hits〜hitsMax の真ん中） */
+  function averageHits(skill) {
+    var hits = Math.max(1, skill.hits || 1);
+    return (skill.hitsMax > hits) ? (hits + skill.hitsMax) / 2 : hits;
+  }
+
+  /** 回復の技の、だいたいの回復量（{min,max} の真ん中か amount。全快は大きな数） */
   function healAmountOf(skill) {
     var h = skill.heal || {};
+    if (h.full) return 9999;
     if (typeof h.amount === "number") return h.amount;
     return ((h.min || 0) + (h.max || h.min || 0)) / 2;
   }
@@ -1050,6 +1116,21 @@
     return bestSingle() || bestGroup();
   };
 
+  /**
+   * 弱体を消す（リフレッシュ。v1.8.0）。弱体の掛かった味方がいれば、いちばん多く掛かっている味方へ。いなければ null。
+   * 治す役（tactic.cure）と、ときどき治す作戦（cureChance）が、状態異常を治すのと同じ所で使う
+   */
+  BattleSystem.prototype._tacticCleanse = function (skills, own) {
+    var list = skills.filter(function (s) { return s.cleanse; }).sort(cheaperFirst);
+    if (list.length === 0) return null;
+    var best = null, top = 0;
+    for (var i = 0; i < own.length; i++) {
+      var n = BattleSystem.debuffCount(own[i]);
+      if (n > top) { top = n; best = own[i]; }
+    }
+    return best ? { skill: list[0], target: best } : null;
+  };
+
   /** 強化・弱体の効果量（倍率は1からの離れ具合。加算・耐性はおおよそ同じ物差しにそろえる） */
   function modifierAmountOf(modifier) {
     var effects = (modifier && modifier.effects) || [];
@@ -1060,6 +1141,7 @@
           e.type === "damageTaken" || e.type === "accuracyMultiplier") total += Math.abs((e.value || 1) - 1);
       else if (e.type === "statBonus") total += Math.abs(e.value || 0) / 20;
       else if (e.type === "resistBonus") total += Math.abs(e.value || 0) / 10;
+      else if (e.type === "evasionBonus") total += Math.abs(e.value || 0) * 2;
     }
     return total;
   }
@@ -1206,8 +1288,10 @@
       if (est.immune) return 0;
       var hit = (skill.accuracy === undefined ? 1 : skill.accuracy) * self._accuracyMultiplier(actor, skill);
       if (self.data.getSkillRule(skill, "evadable") !== false && foe.getEvasion) hit *= (1 - foe.getEvasion());
-      // 何回か当てる技（二段斬り）は回数ぶん
-      var total = est.damage * Math.max(1, skill.hits || 1);
+      // 何回か当てる技（二段斬り）は回数ぶん（回数に幅のある技は真ん中）
+      var total = est.damage * averageHits(skill);
+      // 会心斬り（クリティカルでなければ外れ）は、クリティカルの確率 × クリティカルの倍率で見る
+      if (skill.critOnly) total *= self._criticalChance(skill, actor) * numberOr(((self.data.battle || {}).critical || {}).multiplier, 1);
       var dmg = total * hit;
       var value = Math.min(dmg, foe.currentHp) + (total >= foe.currentHp ? foe.currentHp * 0.5 : 0);
       // 反動のある技（捨て身の体当たり）。反動で自分が倒れるなら使わない。そうでなければ受けるぶんを差し引く
@@ -1265,7 +1349,8 @@
     var normal = candidates[0];
     function estimate(skill, foe) {
       var est = self.calcDamage(actor, foe, skill, true);
-      return est.immune ? 0 : est.damage * Math.max(1, skill.hits || 1);
+      if (est.immune || skill.critOnly) return 0;   // 会心斬りは当てにしない
+      return est.damage * averageHits(skill);
     }
     // 倒せる相手のうち、残りHPのいちばん多いもの（無ければ null）
     function killable(skill) {
@@ -1799,10 +1884,12 @@
     if (max < min) max = min;
 
     var amount = (max > min) ? this.random.nextInt(min, max) : min;
-    if (amount <= 0) return;
+    // 全快（キュアリス。heal.full。v1.8.0）。減っているぶんだけ戻す（焦熱のときは MonsterInstance.heal で半分）
+    if (spec.full) amount = target.getMaxHp() - target.currentHp;
+    else if (amount <= 0) return;
 
-    // 使う側の「回復の技」への倍率（粘晶のネックレスなど。data/items.js の healDealt）
-    if (this.effects) amount = Math.floor(amount * this.effects.getHealDealtMultiplier(actor));
+    // 使う側の「回復の技」への倍率（粘晶のネックレスなど。data/items.js の healDealt）。全快には掛けない
+    if (this.effects && !spec.full) amount = Math.floor(amount * this.effects.getHealDealtMultiplier(actor));
 
     var before = target.currentHp;
     target.heal(amount);
@@ -1828,7 +1915,9 @@
       revealTarget: target,
       revealHp: target.currentHp,
       // 画面が回復の技の演出を出すのに使う（キュアなど。v1.3.0）。道具の回復には付かない
-      target: target, skillId: skill.id
+      target: target, skillId: skill.id,
+      // 全快の技で満タンまで戻った（「すべて 回復した!」。焦熱で半分のときは付かない。v1.8.0）
+      full: !!spec.full && target.currentHp >= target.getMaxHp()
     });
   };
 
@@ -1959,7 +2048,9 @@
     var def = this.data.getStatus ? this.data.getStatus(spec.id) : null;
     if (!def) return;
 
-    var targetSide = (target === actor || skill.target === "ally") ? side : opposite(side);
+    // はね返されて自分に当たった技（反射。v1.8.0）は、相手から受けたものとして扱う
+    var selfAimed = (target === actor && !this._reflectHit);
+    var targetSide = (selfAimed || skill.target === "ally") ? side : opposite(side);
 
     // 完全に無効な相手（主の即死耐性など）
     if (target.isImmuneToStatus && target.isImmuneToStatus(spec.id)) {
@@ -2054,9 +2145,15 @@
   BattleSystem.prototype._applyModifier = function (actor, target, skill, side, events) {
     if (!target.addModifier) return;
 
+    // 掛かる確率（modifier.chance。大渦・旋風斬りの 30%。v1.8.0）。外れたら何も言わない
+    var modChance = skill.modifier && skill.modifier.chance;
+    if (typeof modChance === "number" && modChance < 1 && this.random.next() >= modChance) return;
+
     // 弱体への耐性（2026-10-15。作者の指定）。相手に掛ける弱体は、耐性の倍率の確率でしか入らない。
     // 入らなければ「MISS」（状態異常が入らなかったときと同じ見せ方）。耐性 0 の相手には乱数を使わない
-    var hostile = (target !== actor && skill.target !== "self" && skill.target !== "ally" && skill.target !== "allAllies");
+    // はね返されて自分に当たった弱体（反射。v1.8.0）も、相手から受けたものとして耐性を見る
+    var selfAimed = (target === actor && !this._reflectHit);
+    var hostile = (!selfAimed && skill.target !== "self" && skill.target !== "ally" && skill.target !== "allAllies");
     if (hostile && !isRaising(skill.modifier)) {
       var chance = this._debuffResistMultiplier(target);
       if (chance < 1 && this.random.next() >= chance) {
@@ -2073,9 +2170,10 @@
       type: "modifier", side: side,
       // 自分・味方にかける技では対象が行動した側と同じになるので、対象の側も渡す
       // （味方にかける強化で「敵の ○○」と出ないように。導きの光など）
-      targetSide: (target === actor || skill.target === "ally" || skill.target === "allAllies") ? side : opposite(side),
+      targetSide: (selfAimed || skill.target === "ally" || skill.target === "allAllies") ? side : opposite(side),
       targetName: target.getName(), target: target,
-      skillId: skill.id, skillName: skill.name,
+      // 弱体の名前（焦熱・裂傷は技の名前と別。v1.8.0）。印と「切れた」の文がこの名前で見る
+      skillId: skill.id, skillName: (applied.mod && applied.mod.name) || skill.name,
       // 画面が印を出すのに使う（実際の効果より遅れて出すので、中身も渡しておく）
       effects: skill.modifier.effects || [],
       message: skill.modifier.message || null,
@@ -2106,8 +2204,30 @@
       if (e.type === "resistBonus" && e.value > 0) return true;
       // 毎ターン戻す効果（樹液の膜）
       if ((e.type === "regenOverTime" || e.type === "ppRegen") && (e.value || e.min) > 0) return true;
+      // 回避の強化（陽炎の舞。v1.8.0）
+      if (e.type === "evasionBonus" && e.value > 0) return true;
+      // 反射（リフレクト・リバーサル。v1.8.0）
+      if (e.type === "reflect") return true;
     }
     return false;
+  }
+
+  /**
+   * 反射を破る「攻撃の強化」か（v1.8.0。作者の仕様 2026-11-26）。
+   * 攻撃力の倍率・加算か、与えるダメージの倍率が上がる効果だけでできている強化（ブレイブ・ウォークライ・オーバードライブ・鼓舞の舞・ハウリング）。
+   * 防御も上がる王の号令は入らない。ちからためは強化（modifiers）ではないので入らない
+   */
+  function isAttackBuff(mod) {
+    var effects = (mod && mod.effects) || [];
+    if (effects.length === 0) return false;
+    for (var i = 0; i < effects.length; i++) {
+      var e = effects[i];
+      var ok = (e.type === "statMultiplier" && e.stat === "attack" && e.value > 1) ||
+               (e.type === "statBonus" && e.stat === "attack" && e.value > 0) ||
+               (e.type === "damageDealt" && e.value > 1);
+      if (!ok) return false;
+    }
+    return true;
   }
 
   /** 技を使用し、PPの支払い・命中判定・ダメージ適用を行う（単体） */
@@ -2118,7 +2238,7 @@
     // 何回か当てる技（二段斬り。技の hits）。1回ずつ命中を判定し、相手が倒れたらそこで止める
     // randomTargets（歯車投げ。v1.3.0）は1回ごとに向かい側の盤面からでたらめに1体選ぶ（立ち塞がる者がいればそちらへ）。
     // 相手が全員倒れるまで続ける
-    var hits = Math.max(1, skill.hits || 1);
+    var hits = this._rollHits(skill);
     for (var h = 0; h < hits; h++) {
       if (h > 0 && actor.isFainted()) break;
       var aim = target;
@@ -2128,6 +2248,15 @@
       } else if (h > 0 && (target.isFainted() || target._removed)) break;
       this._resolveHit(actor, aim, skill, side, events);
     }
+  };
+
+  /**
+   * 何回当てるか。hits（回数）。hitsMax を書いた技は hits〜hitsMax から毎回でたらめ（乱れ斬り 3〜4・つるぎの舞 3〜6。v1.8.0）
+   */
+  BattleSystem.prototype._rollHits = function (skill) {
+    var hits = Math.max(1, skill.hits || 1);
+    if (skill.hitsMax > hits) hits = this.random.nextInt(hits, skill.hitsMax);
+    return hits;
   };
 
   /** 向かい側の盤面の、倒れていない1体をでたらめに（立ち塞がる者がいればそちら）。いなければ null */
@@ -2249,6 +2378,30 @@
       return;
     }
 
+    // 味方をでたらめに何回か回復する踊り（ハッスルダンス。randomTargets と heal。v1.8.0）。
+    // 1回ごとに生きている味方からでたらめに選ぶ（HP が満タンの味方にも当たる）。回復は1回ずつ順に見せる
+    if (skill.randomTargets && skill.heal) {
+      var times = this._rollHits(skill), any = false, landed = [];
+      for (var r = 0; r < times; r++) {
+        var alive = aliveOf(targets);
+        if (alive.length === 0) break;
+        var pick = alive[this.random.nextInt(0, alive.length - 1)];
+        var got = [];
+        this._applyHeal(actor, pick, skill, side, got);
+        for (var gi = 0; gi < got.length; gi++) {
+          if (got[gi].type === "healFull") continue;
+          got[gi].hits = times;
+          landed.push(got[gi]);
+          events.push(got[gi]);
+          any = true;
+        }
+      }
+      if (!any) {
+        events.push({ type: "healFull", side: side, targetSide: side, targetName: actor.getName(), target: actor, everyone: true });
+      }
+      return;
+    }
+
     this._simulSeq = (this._simulSeq || 0) + 1;
     var seq = this._simulSeq, first = true, cured = false, healedAny = false;
     for (var i = 0; i < targets.length; i++) {
@@ -2295,7 +2448,7 @@
   };
 
   // 全体の技で「当たり」として同時に見せる出来事
-  var SIMUL_HEAD = { critical: true, effective: true, resisted: true, damage: true, miss: true, immune: true };
+  var SIMUL_HEAD = { critical: true, effective: true, resisted: true, damage: true, miss: true, immune: true, guardCover: true };
   var STATUS_RESULT = { status: true, statusMiss: true, statusImmune: true };
 
   /**
@@ -2303,6 +2456,8 @@
    * 出せなければ null を返す。
    */
   BattleSystem.prototype._prepareSkill = function (actor, skillId, side, events) {
+    // 技を1回使うごとの番号（特性「しぶとい」が「同じ技の残りの攻撃」を見分けるのに使う。v1.8.0）
+    this._skillSerial = (this._skillSerial || 0) + 1;
     var skill = this.data.getSkill(skillId);
     if (!skill) {
       events.push({ type: "noSkill", side: side, actorName: actor.getName() });
@@ -2347,24 +2502,37 @@
   /** 相手1体ぶんの命中判定・効果・ダメージ */
   BattleSystem.prototype._resolveHit = function (actor, target, skill, side, events) {
     var battle = this.data.battle || {};
-    var accuracy = (skill.accuracy === undefined)
-      ? (battle.defaultAccuracy === undefined ? 1 : battle.defaultAccuracy)
-      : skill.accuracy;
 
-    // 盲目などで命中率が下がる。
-    // このあとに回避判定がもう一度あることに注意（当たりにくさは2段構え）
-    accuracy *= this._accuracyMultiplier(actor, skill);
-
-    if (this.random.next() >= accuracy) {
-      events.push({ type: "miss", side: side, targetName: target.getName(), target: target });
-      return;
+    // かばう（v1.8.0）。的が差し替わっていたら「かばった!」を先に出す
+    if (target && target._guardHit) {
+      events.push({ type: "guardCover", targetSide: opposite(side), targetName: target.getName(), target: target,
+        allyName: target._guardHit.getName(), ally: target._guardHit });
+      target._guardHit = null;
     }
+    // はね返された技（反射。v1.8.0）は、もとの相手に当たったあとなので、命中と回避をもう一度は見ない
+    if (!this._reflectHit) {
+      var accuracy = (skill.accuracy === undefined)
+        ? (battle.defaultAccuracy === undefined ? 1 : battle.defaultAccuracy)
+        : skill.accuracy;
 
-    // 相手がかわす。命中判定を抜けたあとの、受け手側の最後の関門。
-    // 自分にかける技と、evadable: false と書いた技はかわせない
-    if (this._isEvaded(actor, target, skill)) {
-      events.push({ type: "miss", side: side, targetName: target.getName(), target: target });
-      return;
+      // 盲目などで命中率が下がる。
+      // このあとに回避判定がもう一度あることに注意（当たりにくさは2段構え）
+      accuracy *= this._accuracyMultiplier(actor, skill);
+
+      if (this.random.next() >= accuracy) {
+        events.push({ type: "miss", side: side, targetName: target.getName(), target: target });
+        return;
+      }
+
+      // 相手がかわす。命中判定を抜けたあとの、受け手側の最後の関門。
+      // 自分にかける技と、evadable: false と書いた技はかわせない
+      if (this._isEvaded(actor, target, skill)) {
+        events.push({ type: "miss", side: side, targetName: target.getName(), target: target });
+        return;
+      }
+
+      // 反射（リフレクト・リバーサル。v1.8.0）。当たったところで、相手が返す技を張っていれば撃った本人へ返す
+      if (this._reflectHitBack(actor, target, skill, side, events)) return;
     }
 
     // 力をためる技（ちからため）。次の自分の手番まで残る（v1.4.1）。
@@ -2376,7 +2544,20 @@
       }
       actor._charged = skill.charge;
       actor._chargeFresh = true;
-      events.push({ type: "charge", targetSide: side, targetName: actor.getName(), target: actor, se: "buff" });
+      // 技に音があれば（se_charge。v1.8.0）強化の音は重ねない
+      events.push({ type: "charge", targetSide: side, targetName: actor.getName(), target: actor, se: skill.se ? null : "buff" });
+      return;
+    }
+
+    // PP を分ける技（分け与え。v1.8.0）
+    if (skill.ppShare) {
+      this._applyPpShare(actor, target, side, events);
+      return;
+    }
+
+    // 弱体をすべて消す技（リフレッシュ。v1.8.0）
+    if (skill.cleanse) {
+      this._applyCleanse(target, skill, side, events);
       return;
     }
 
@@ -2423,7 +2604,21 @@
       if (!skill.power) return;
     }
 
-    var result = this.calcDamage(actor, target, skill);
+    // 会心斬り（critOnly。v1.8.0）。当たったらクリティカルを判定し、クリティカルでなければ外れ（ダメージ0）
+    var forcedBefore = this._forceCritical;
+    if (skill.critOnly) {
+      if (!this._rollCritical(skill, actor)) {
+        events.push({ type: "miss", side: side, targetName: target.getName(), target: target, critMiss: true });
+        return;
+      }
+      this._forceCritical = true;
+    }
+    var result;
+    try {
+      result = this.calcDamage(actor, target, skill);
+    } finally {
+      this._forceCritical = forcedBefore;
+    }
 
     // 無効化されたときはダメージを与えず、その旨だけ知らせる
     if (result.immune) {
@@ -2441,6 +2636,10 @@
       events.push({ type: "resisted", side: side, targetName: target.getName(), target: target });
     }
 
+    // 特性「しぶとい」（v1.8.0 ハンザキ）。倒れるはずのダメージを HP1 で止める
+    var endure = this._endureDamage(target, result.damage);
+    if (endure) result.damage = endure.damage;
+
     target.takeDamage(result.damage);
 
     events.push({
@@ -2450,6 +2649,10 @@
       // 画面側がダメージ表示の位置を決められるよう、対象そのものも渡す
       target: target, critical: result.critical
     });
+    if (endure && endure.found) {
+      events.push({ type: "endure", side: side, targetSide: opposite(side), targetName: target.getName(), target: target,
+        abilityName: endure.found.name, sourceKind: endure.found.kind, work: "endure" });
+    }
 
     // 0ダメージ（当たったが、びくともしなかった）。吸血・とげ・目を覚ますは起きない。
     // 画面側は被弾の動きをせず「ダメージを与えられなかった」と出す（BattleScene）。
@@ -2458,15 +2661,19 @@
       if (skill.dispel) this._applyDispel(target, skill, side, events);
       if (skill.modifier) this._applyModifier(actor, target, skill, side, events);
       if (lateStatus) this._applyStatus(actor, target, skill, side, events);
+      this._applyExtraStatus(actor, target, skill, side, events);
       return;
     }
 
+    // はね返されて自分に当たった技（反射。v1.8.0）では、吸う・反動・特性の反撃・当てたら状態異常 は起こさない
+    var bounced = !!this._reflectHit;
+
     // 与えたダメージの一部を自分のHPに変える（吸血など）。
     // 倒しきった相手からも吸えるので、faint より先に処理する
-    this._applyDrain(actor, skill, result.damage, side, events);
+    if (!bounced) this._applyDrain(actor, skill, result.damage, side, events);
 
     // 反動（捨て身の体当たり。技の recoil）。与えたダメージの一部を自分も受ける。倒れることもある
-    this._applyRecoil(actor, skill, result.damage, side, events);
+    if (!bounced) this._applyRecoil(actor, skill, result.damage, side, events);
 
     // 特性「亡者の魂」。倒れるはずのところを、このターンだけ踏みとどまる
     if (target.isFainted()) this._tryUndying(target, opposite(side), events);
@@ -2474,12 +2681,12 @@
     if (target.isFainted()) {
       events.push({ type: "faint", side: side, targetName: target.getName(), target: target });
       // 倒されても、とげや電気は相手に返る
-      this._applyCounterStatus(actor, target, skill, side, events);
+      if (!bounced) this._applyCounterStatus(actor, target, skill, side, events);
       return;
     }
 
     // 特性「放電」「毒のとげ」。攻撃してきた相手を状態異常にすることがある
-    this._applyCounterStatus(actor, target, skill, side, events);
+    if (!bounced) this._applyCounterStatus(actor, target, skill, side, events);
 
     // 殴られて目を覚ます（眠り）。倒れた相手には意味がないので、そのあとに置く
     this._wakeOnDamage(target, events);
@@ -2491,9 +2698,141 @@
     if (skill.dispel) this._applyDispel(target, skill, side, events);
     if (skill.modifier) this._applyModifier(actor, target, skill, side, events);
     if (lateStatus) this._applyStatus(actor, target, skill, side, events);
+    this._applyExtraStatus(actor, target, skill, side, events);
 
     // 装備・特性の「当てたら状態異常」（眠花の杖など。v1.0.0）。目を覚ます判定のあとに置く（入れた眠りが覚めないように）
-    this._applyOnHitStatus(actor, target, skill, side, events);
+    if (!bounced) this._applyOnHitStatus(actor, target, skill, side, events);
+  };
+
+  /**
+   * 反射（リフレクト・リバーサル。v1.8.0。作者の仕様 2026-11-26）。
+   * 相手（target）が返す強化を持っていれば「はね返した!」を出し、技を撃った本人（actor）に当て直して true を返す。
+   *   当て直しは、撃った本人が自分に技を当てたものとして計算する（_resolveHit を actor → actor で。命中と回避は見ない）。
+   *   side は返した側にして呼ぶ（出来事の「敵の」の付き方・のけぞる向きが、返した側から撃たれたものになる）。
+   *   当て直しの中で出た出来事には reflected: true を付ける（画面が、範囲の中心に出す演出を撃った側の列に出さないため）。
+   * 返さないとき（味方から受けた技・攻撃の強化が掛かっている・返された技・種類が違う）は false
+   */
+  BattleSystem.prototype._reflectHitBack = function (actor, target, skill, side, events) {
+    var found = this._reflectorFor(actor, target, skill, side);
+    if (!found) return false;
+    events.push({
+      type: "reflect", side: side, targetSide: opposite(side),
+      targetName: target.getName(), target: target,
+      actorName: actor.getName(), actor: actor,
+      skillId: skill.id, skillName: skill.name,
+      against: found.against, reflectName: found.name
+    });
+    if (actor.isFainted() || actor._removed) return true;
+    var start = events.length;
+    this._reflectHit = true;
+    try {
+      this._resolveHit(actor, actor, skill, opposite(side), events);
+    } finally {
+      this._reflectHit = false;
+    }
+    for (var i = start; i < events.length; i++) events[i].reflected = true;
+    return true;
+  };
+
+  /**
+   * その技を target が返すか。返すなら { against, name }（name は返す強化の名前）、返さないなら null
+   *   against: "resonance" … 共鳴を返す（リフレクト）
+   *   against: "physical"  … 通常攻撃と斬撃を返す（リバーサル）
+   */
+  BattleSystem.prototype._reflectorFor = function (actor, target, skill, side) {
+    if (this._reflectHit || !actor || !target || target === actor || !skill) return null;
+    if (target.isFainted && target.isFainted()) return null;
+    // 相手から撃たれた技だけ（味方のキュアや強化は、返す強化を持っていても普通に受ける）
+    var foes = (side === "ally") ? this.enemies : this.allies;
+    if (foes.indexOf(target) < 0) return null;
+    if (skill.target === "self" || skill.target === "ally" || skill.target === "allAllies") return null;
+
+    var against = null;
+    if (skill.kind === "resonance") against = "resonance";
+    else if (skill.kind === "slash" || skill.id === this.getNormalAttackId()) against = "physical";
+    if (!against) return null;
+
+    var mods = target.modifiers || [], hit = null;
+    for (var i = 0; i < mods.length && !hit; i++) {
+      var effects = mods[i].effects || [];
+      for (var k = 0; k < effects.length; k++) {
+        if (effects[k].type === "reflect" && effects[k].against === against) { hit = mods[i]; break; }
+      }
+    }
+    if (!hit) return null;
+
+    // 撃った側に攻撃の強化が掛かっていれば、返されずにそのまま当たる
+    var own = actor.modifiers || [];
+    for (var j = 0; j < own.length; j++) if (isAttackBuff(own[j])) return null;
+    return { against: against, name: hit.name };
+  };
+
+  /**
+   * 2つ目の状態異常（技の extraStatus。セイントノヴァの封印。v1.8.0）。1つ目（status）と同じく、ダメージのあとで判定する
+   */
+  BattleSystem.prototype._applyExtraStatus = function (actor, target, skill, side, events) {
+    if (!skill.extraStatus || !target || target.isFainted()) return;
+    this._applyStatus(actor, target, { id: skill.id, status: skill.extraStatus, target: skill.target }, side, events);
+  };
+
+  /**
+   * PP を分ける（技の ppShare。分け与え。v1.8.0）。
+   * 自分のいまの PP の半分（切り捨て）を渡す。相手の上限を超えるぶんは自分に残る。PP が 1 以下なら分けられない
+   */
+  BattleSystem.prototype._applyPpShare = function (actor, target, side, events) {
+    if (!target || target === actor || target.isFainted() || target.currentPp === undefined) return;
+    var base = { side: side, targetSide: side, targetName: target.getName(), target: target,
+                 actorName: actor.getName(), actor: actor };
+    function ev(type, extra) { var o = { type: type }, k; for (k in base) o[k] = base[k]; for (k in extra) o[k] = extra[k]; return o; }
+    if ((actor.currentPp || 0) <= 1) { events.push(ev("ppShareNone", { reason: "empty" })); return; }
+    var room = target.getMaxPp() - target.currentPp;
+    if (room <= 0) { events.push(ev("ppShareNone", { reason: "full" })); return; }
+    var amount = Math.min(Math.floor(actor.currentPp / 2), room);
+    actor.currentPp -= amount;
+    target.currentPp += amount;
+    events.push(ev("ppShare", { amount: amount, ppTarget: target, ppValue: target.currentPp,
+      ppSource: actor, ppSourceValue: actor.currentPp, se: "heal" }));
+  };
+
+  /**
+   * 弱体をすべて消す（技の cleanse。リフレッシュ。v1.8.0）。
+   * 弱体＝掛かったときに弱体の色で出るもの（isRaising でないもの。焦熱・裂傷も入る）。強化・状態異常はそのまま
+   */
+  BattleSystem.prototype._applyCleanse = function (target, skill, side, events) {
+    if (!target || target.isFainted() || !Array.isArray(target.modifiers)) return;
+    var removed = BattleSystem.removeDebuffs(target);
+    events.push({ type: "cleanse", side: side, targetSide: side,
+      targetName: target.getName(), target: target, skillId: skill.id,
+      names: removed.map(function (mod) { return mod.name; }),
+      se: removed.length > 0 ? "buff" : null });
+  };
+
+  /**
+   * 裂傷（効果の種類 slipDamage。v1.8.0）。ターンの終わり（毒のあと）に min〜max のダメージを受ける。
+   * 特性「カチカチ」で減る（毒と同じ）。これで倒れることもある
+   */
+  BattleSystem.prototype._tickSlipDamage = function (events) {
+    var groups = [{ list: this.getFieldAllies(), side: "ally" }, { list: this.getFieldEnemies(), side: "enemy" }];
+    for (var g = 0; g < groups.length; g++) {
+      for (var i = 0; i < groups[g].list.length; i++) {
+        var monster = groups[g].list[i];
+        if (monster.isFainted()) continue;
+        var found = this._findEffects(monster, "slipDamage");
+        for (var f = 0; f < found.length && !monster.isFainted(); f++) {
+          var spec = found[f].effect;
+          var amount = this.random.nextInt(spec.min || 0, Math.max(spec.min || 0, spec.max || spec.min || 0));
+          if (monster.reduceDirectDamage) amount = monster.reduceDirectDamage(amount);
+          if (amount <= 0) continue;
+          monster.takeDamage(amount);
+          events.push({ type: "slipDamage", targetSide: groups[g].side,
+            targetName: monster.getName(), target: monster, name: found[f].name,
+            amount: amount, currentHp: monster.currentHp, maxHp: monster.getMaxHp() });
+          if (monster.isFainted()) {
+            events.push({ type: "faint", targetSide: groups[g].side, targetName: monster.getName(), target: monster });
+          }
+        }
+      }
+    }
   };
 
   /**
@@ -2593,6 +2932,22 @@
     return result;
   };
 
+  /**
+   * 働くか働かないかの効果に確率（chance）があるとき、1回の戦闘で1度だけくじを引いて覚える（v1.8.0）。
+   * chance が無ければいつも働く。同じ戦闘で何度聞かれても同じ答えを返す
+   */
+  BattleSystem.prototype._rolledOnce = function (monster, key, chance) {
+    if (chance === undefined || chance >= 1) return true;
+    if (!this._effectRolls) this._effectRolls = [];
+    for (var i = 0; i < this._effectRolls.length; i++) {
+      var r = this._effectRolls[i];
+      if (r.monster === monster && r.key === key) return r.ok;
+    }
+    var ok = this.random.next() < chance;
+    this._effectRolls.push({ monster: monster, key: key, ok: ok });
+    return ok;
+  };
+
   /** _findEffects の最初の1件（無ければ null） */
   BattleSystem.prototype._findEffect = function (monster, type, filter) {
     return this._findEffects(monster, type, filter)[0] || null;
@@ -2637,13 +2992,17 @@
    */
   BattleSystem.prototype._abilityPopupEvent = function (monster, side, found) {
     return { type: "abilityPopup", targetSide: side,
-      targetName: monster.getName(), target: monster, abilityName: found.name, sourceKind: found.kind || "" };
+      targetName: monster.getName(), target: monster, abilityName: found.name, sourceKind: found.kind || "",
+      work: found.effect ? found.effect.type : "" };
   };
 
-  /** 「○○ の 先手!」のような、特性が働いた合図の出来事 */
-  BattleSystem.prototype._abilityEvent = function (monster, side, name, kind) {
+  /**
+   * 「○○ の 先手!」のような、特性が働いた合図の出来事。
+   * work … 効果の種類（札の「名前：働き」の働き。data/messages.js の battleUi.popupWork）
+   */
+  BattleSystem.prototype._abilityEvent = function (monster, side, name, kind, work) {
     return { type: "ability", targetSide: side,
-      targetName: monster.getName(), target: monster, abilityName: name, sourceKind: kind || "" };
+      targetName: monster.getName(), target: monster, abilityName: name, sourceKind: kind || "", work: work || "" };
   };
 
   /**
@@ -2758,14 +3117,48 @@
 
     var found = this._findEffect(target, "undying");
     if (!found) return false;
+    // 書の2つ目・3つ目で弱めた亡者の魂は、働く確率がある（v1.8.0）。外れたらその戦闘ではもう働かない
+    if (!this._rolledOnce(target, "undying", found.effect.chance)) return false;
 
     target._undying = true;
     target._undyingUsed = true;
     this._undyingSides[targetSide] = true;
 
     events.push({ type: "undying", targetSide: targetSide,
-      targetName: target.getName(), target: target, abilityName: found.name, sourceKind: found.kind });
+      targetName: target.getName(), target: target, abilityName: found.name, sourceKind: found.kind, work: "undying" });
     return true;
+  };
+
+  /**
+   * 特性「しぶとい」（endure。v1.8.0 ハンザキ。作者の指定 2026-11-27）。
+   *   ・倒れるはずの攻撃のダメージを受けても HP1 で踏みとどまる。1戦闘に uses 回まで（ふつう1回。絆の報酬 endureUses で2回）
+   *   ・攻撃で倒れるときだけ（ここを呼ぶのは _resolveHit だけ。毒・裂傷・反動・即死では働かない。亡者の魂と同じ）
+   *   ・何回も当たる技の途中で踏みとどまったら、その技の残りの攻撃もすべて HP1 で止まる（_endureSerial ＝ 技の番号）。
+   *     その技が終わったあとは、ダメージを受ければふつうに倒れる
+   *   ・書の2つ目・3つ目で弱めたものは、働く確率がある（亡者の魂と同じ）
+   * @returns {{damage:number, found:object|null}|null} 止めたときだけ。found は札を出すとき（その技で初めて働いたとき）
+   */
+  BattleSystem.prototype._endureDamage = function (target, damage) {
+    if (!target || target.currentHp <= 0 || damage < target.currentHp) return null;
+    // 同じ技の続きは、もう一度 HP1 で止める（札は出さない）
+    if (target._endureSerial !== null && target._endureSerial !== undefined && target._endureSerial === this._skillSerial) {
+      return { damage: Math.max(0, target.currentHp - 1), found: null };
+    }
+    var found = this._findEffect(target, "endure");
+    if (!found) return null;
+    if ((target._endureUsed || 0) >= this._endureUses(target)) return null;
+    if (!this._rolledOnce(target, "endure", found.effect.chance)) return null;
+    target._endureUsed = (target._endureUsed || 0) + 1;
+    target._endureSerial = this._skillSerial;
+    return { damage: Math.max(0, target.currentHp - 1), found: found };
+  };
+
+  /** しぶといを1戦闘に何回使えるか（絆の報酬 endureUses。無ければ1） */
+  BattleSystem.prototype._endureUses = function (target) {
+    var uses = 1;
+    var list = this._findEffects(target, "endureUses");
+    for (var i = 0; i < list.length; i++) uses = Math.max(uses, list[i].effect.value || 1);
+    return uses;
   };
 
   /** 踏みとどまっていた者を、ターンの終わりに倒す */
@@ -2825,6 +3218,39 @@
   };
 
   /**
+   * かばう（guard を持つ技。v1.8.0・2026-11-25 作者の指定）を、立ち塞がるのあとでターンの頭に済ませる。
+   * 選んだ味方1体（自分は選べない）への攻撃を、そのターンのあいだ代わりに受ける。受けるダメージは減らない。
+   * 1体の技も、全体の技のその味方のぶんも、状態異常・弱体だけの技もかばう。必中の技（sureHit）はかばえない。
+   * 麻痺・眠りで動けないとき、PP が足りないときは、かばえない（立ち塞がると同じ）
+   */
+  BattleSystem.prototype._applyGuards = function (order, events) {
+    for (var i = 0; i < order.length; i++) {
+      var step = order[i];
+      var action = step.action;
+      if (!action || action.type !== "skill") continue;
+      var skill = this.data.getSkill(action.skillId);
+      if (!skill || !skill.guard) continue;
+      if (step.actor.isFainted() || step.actor._removed) continue;
+      if (!this._canUseSkill(step.actor, action.skillId)) continue;
+
+      step._done = true;
+      if (this._blockedByStatus(step, events)) continue;
+      if (this._sealedFrom(step, action, events)) continue;
+
+      var own = (step.side === "ally") ? this.getFieldAllies() : this.getFieldEnemies();
+      var ally = action.target;
+      if (!ally || own.indexOf(ally) < 0) ally = own[action.targetIndex || 0];
+      if (!this._prepareSkill(step.actor, skill.id, step.side, events)) continue;
+      if (!ally || ally === step.actor || ally.isFainted() || ally._removed) continue;
+
+      ally._guardedBy = step.actor;
+      events.push({ type: "guard", side: step.side, targetSide: step.side,
+        targetName: step.actor.getName(), target: step.actor,
+        allyName: ally.getName(), ally: ally, skillId: skill.id, se: skill.se ? null : "buff" });   // 技に音があれば（se_guard）重ねない
+    }
+  };
+
+  /**
    * 攻撃の的を、立ち塞がっている仲間へ差し替える。
    * 向かい側（守る側）に _covering の者がいて、まだ立っていれば、その者が受ける。
    * 範囲全体の技も1体ずつこれを通すので、「全員ぶん」を1体で受けることになる。
@@ -2842,12 +3268,22 @@
       var m = group[i];
       if (m._covering && m !== target && !m.isFainted() && !m._removed) return m;
     }
+    // かばう（v1.8.0）。かばっている者が立っていれば、その者が受ける。「かばった」の文は _resolveHit が出す
+    var guard = target._guardedBy;
+    if (guard && guard !== target && !guard.isFainted() && !guard._removed && group.indexOf(guard) >= 0) {
+      guard._guardHit = target;
+      return guard;
+    }
     return target;
   };
 
   BattleSystem.prototype._clearCovers = function () {
     var everyone = (this.allies || []).concat(this.enemies || []);
-    for (var i = 0; i < everyone.length; i++) everyone[i]._covering = false;
+    for (var i = 0; i < everyone.length; i++) {
+      everyone[i]._covering = false;
+      everyone[i]._guardedBy = null;
+      everyone[i]._guardHit = null;
+    }
   };
 
   /**
@@ -2892,7 +3328,7 @@
           events.push({
             type: "regen", targetSide: groups[g].side,
             targetName: monster.getName(), abilityName: sources[s].name, sourceKind: sources[s].kind,
-            target: monster,
+            work: "regen", target: monster,
             healAmount: healed, revealTarget: monster, revealHp: monster.currentHp
           });
         }
@@ -2927,9 +3363,44 @@
         events.push({
           type: "ppRegen", targetSide: groups[g].side,
           targetName: monster.getName(), abilityName: found[0].name, sourceKind: found[0].kind,
-          target: monster, amount: restored,
+          work: "ppRegen", target: monster, amount: restored,
           ppTarget: monster, ppValue: monster.currentPp
         });
+      }
+    }
+  };
+
+  /**
+   * 特性「育つ石」（効果の種類 growingStat。v1.8.0 セキジュン）。
+   * ターンの終わりに、能力の倍率に step を掛ける（max まで）。育った分は monster._grownStats に持ち、
+   * EffectSystem.collectEffects が強化とは別の倍率として足す（強化とも重なる）。戦闘が終わると clearModifiers で消える。
+   * いちばん上まで育ったら、もう何も出さない
+   */
+  BattleSystem.prototype._tickGrowingStat = function (events) {
+    var groups = [{ list: this.getFieldAllies(), side: "ally" },
+                  { list: this.getFieldEnemies(), side: "enemy" }];
+
+    for (var g = 0; g < groups.length; g++) {
+      for (var i = 0; i < groups[g].list.length; i++) {
+        var monster = groups[g].list[i];
+        if (monster.isFainted() || monster._undying) continue;
+
+        var found = this._findEffects(monster, "growingStat");
+        for (var f = 0; f < found.length; f++) {
+          var effect = found[f].effect;
+          var stat = effect.stat;
+          var max = effect.max || 1.5;
+          if (!monster._grownStats) monster._grownStats = {};
+          var before = monster._grownStats[stat] || 1;
+          if (before >= max - 1e-9) continue;
+          var next = Math.min(max, before * (effect.step || 1.1));
+          monster._grownStats[stat] = next;
+          events.push({
+            type: "growStat", targetSide: groups[g].side,
+            targetName: monster.getName(), target: monster, abilityName: found[f].name, sourceKind: found[f].kind,
+            work: "growingStat", stat: stat, value: next
+          });
+        }
       }
     }
   };
@@ -2956,10 +3427,13 @@
         var wind = this._findEffect(monster, "tailwind");
         if (wind) {
           events.push({ type: "tailwind", targetSide: groups[g].side,
-            targetName: monster.getName(), target: monster, abilityName: wind.name, sourceKind: wind.kind });
+            targetName: monster.getName(), target: monster, abilityName: wind.name, sourceKind: wind.kind,
+            work: "tailwind" });
         }
 
         var ward = this._findEffect(monster, "wardAlly");
+        // 書の2つ目・3つ目で弱めた芽吹きは、働く確率がある（v1.8.0）
+        if (ward && !this._rolledOnce(monster, "wardAlly", ward.effect.chance)) ward = null;
         if (!ward) continue;
         var others = [];
         for (var j = 0; j < list.length; j++) {
@@ -2971,7 +3445,7 @@
         picked._statusWard = { name: ward.name };
         events.push({ type: "wardGiven", targetSide: groups[g].side,
           targetName: monster.getName(), target: monster, abilityName: ward.name, sourceKind: ward.kind,
-          allyName: picked.getName(), ally: picked });
+          work: "wardAlly", allyName: picked.getName(), ally: picked });
       }
     }
   };
@@ -3014,7 +3488,7 @@
         if (cured.length === 0) continue;
 
         var side = groups[g].side;
-        events.push(this._abilityEvent(monster, side, found.name, found.kind));
+        events.push(this._abilityEvent(monster, side, found.name, found.kind, "shedStatus"));
         events.push({
           type: "cure", side: side, targetSide: side,
           targetName: monster.getName(), target: monster,
@@ -3091,6 +3565,7 @@
       // 特性で吸ったときは名前を出す（技の吸血は技名が既に出ている）
       abilityName: abilityName,
       sourceKind: abilityKind,
+      work: abilityName ? "drain" : "",
       target: actor,
       healAmount: healed,
       revealTarget: actor,
@@ -3130,7 +3605,9 @@
     // 1体の体技も同じ形（v1.4.1・2026-11-12 作者の指定。クリティカルは categories.js の体技の決まりで出ない）。
     // 全体の体技は威力そのものが基礎（固定ダメージ。攻撃力・防御力は効かない。BattleSystem.bodyModeOf）
     var bodyMode = isNormal ? null : BattleSystem.bodyModeOf(skill);
-    var slashRate = (!isNormal && ((skill.kind === "slash" && !skill.damageKind) || bodyMode === "rate"))
+    // damageFormula: "normalRate" … 踊りでも斬撃と同じ「通常攻撃の基礎 × 倍率」（つるぎの舞。v1.8.0）
+    var slashRate = (!isNormal && ((skill.kind === "slash" && !skill.damageKind) || bodyMode === "rate" ||
+                                   skill.damageFormula === "normalRate"))
       ? numberOr(skill.power, 1) : null;
     var fixedBase = (bodyMode === "fixed") ? Math.max(0, numberOr(skill.power, 0)) : null;
     var useNormal = isNormal || slashRate !== null;
@@ -3166,6 +3643,13 @@
              - (ignoreDefense ? 0 : defender.getDefense() * defenseFactor);
     base = Math.max(0, base);
     if (slashRate !== null) base *= slashRate;
+    // 技ごとの式（damageFormula: { stat, factor, defenseFactor }。彗星のサンバ・不動のボレロ。v1.8.0）：
+    //   自分の stat × factor − 相手の防御 × defenseFactor。攻撃力も威力も使わない
+    var formula = skill.damageFormula;
+    if (!isNormal && formula && typeof formula === "object") {
+      var own = formula.stat === "speed" ? attacker.getSpeed() : formula.stat === "defense" ? attacker.getDefense() : attacker.getAttack();
+      base = Math.max(0, own * numberOr(formula.factor, 0) - (ignoreDefense ? 0 : defender.getDefense() * numberOr(formula.defenseFactor, 0)));
+    }
     // 全体の体技：威力がそのまま基礎（属性・乱数・防御コマンド・特性と装備はこのあと掛かる）
     if (fixedBase !== null) base = fixedBase;
 
@@ -3300,14 +3784,17 @@
   BattleSystem.prototype._rollCritical = function (skill, attacker) {
     // 行動手順の「必ずクリティカル」（主の forceCritical。v1.0.0）
     if (this._forceCritical) return true;
-    // クリティカルを出さない技（範囲全体の技・ブレスなど）
-    if (this.data.getSkillRule(skill, "canCritical") === false) return false;
+    return this.random.next() < this._criticalChance(skill, attacker);
+  };
 
+  /** クリティカルの確率（共通値 + 技の criticalBonus + 種族の criticalBonus。出ない技は 0） */
+  BattleSystem.prototype._criticalChance = function (skill, attacker) {
+    // クリティカルを出さない技（範囲全体の技・ブレスなど）
+    if (this.data.getSkillRule(skill, "canCritical") === false) return 0;
     var config = (this.data.battle || {}).critical || {};
     var species = attacker && attacker._species;
-    var rate = numberOr(config.baseRate, 0) + numberOr(skill.criticalBonus, 0) +
-               numberOr(species && species.criticalBonus, 0);
-    return this.random.next() < rate;
+    return numberOr(config.baseRate, 0) + numberOr(skill.criticalBonus, 0) +
+           numberOr(species && species.criticalBonus, 0);
   };
 
   /**
@@ -3636,7 +4123,7 @@
   BattleSystem.skillRoleOf = function (skill) {
     if (!skill) return "attack";
     if (BattleSystem.dealsDamage(skill)) return "attack";
-    if (skill.heal || skill.cureStatus || skill.revive) return "heal";
+    if (skill.heal || skill.cureStatus || skill.revive || skill.cleanse || skill.ppShare) return "heal";
     if (skill.status) return "status";
     if (skill.ppDamage) return "debuff";
     if (skill.dispel) return "debuff";
@@ -3699,8 +4186,24 @@
     return n;
   };
 
+  /** 弱体をすべて外す（リフレッシュ。v1.8.0）。外したものを返す */
+  BattleSystem.removeDebuffs = function (monster) {
+    var kept = [], removed = [];
+    var mods = (monster && monster.modifiers) || [];
+    for (var i = 0; i < mods.length; i++) (isRaising(mods[i]) ? kept : removed).push(mods[i]);
+    if (monster) monster.modifiers = kept;
+    return removed;
+  };
+
+  /** 掛かっている弱体の数（作戦のリフレッシュ） */
+  BattleSystem.debuffCount = function (monster) {
+    var n = 0, mods = (monster && monster.modifiers) || [];
+    for (var i = 0; i < mods.length; i++) if (!isRaising(mods[i])) n++;
+    return n;
+  };
+
   /**
-   * 掛かっている強化をすべて外して、外したものを返す（弱体は残す。v1.8.0 波さらい）。
+   * 掛かっている強化をすべて外して、外したものを返す（弱体は残す。v1.8.0 波さらい）。反射（リフレクト・リバーサル）も強化として外れる。
    * ちからためでためた力も外す（返す1件は { name: "ちからため" }。印は無いので、画面は文と札だけ出す）
    */
   BattleSystem.removeBuffs = function (monster) {
@@ -3732,7 +4235,8 @@
   BattleSystem.dealsDamage = function (skill) {
     if (!skill) return false;
     if (skill.power) return true;
-    return !(skill.heal || skill.modifier || skill.status || skill.cureStatus || skill.ppDamage || skill.wardStatus || skill.charge || skill.revive || skill.dispel);
+    return !(skill.heal || skill.modifier || skill.status || skill.cureStatus || skill.ppDamage || skill.wardStatus || skill.charge || skill.revive || skill.dispel ||
+             skill.guard || skill.ppShare || skill.cleanse);
   };
 
   NS.BattleSystem = BattleSystem;

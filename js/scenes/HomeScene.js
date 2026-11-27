@@ -254,6 +254,15 @@
     if (value === "dex") game.homeSeen.dex = this._dexCount();
   };
 
+  /** data/home.js の項目（value で探す。無ければ「いつでも使える」扱いの空の項目） */
+  HomeScene.prototype._menuEntry = function (value) {
+    var entries = (this.game.data.home || {}).menu || [];
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].value === value) return entries[i];
+    }
+    return {};
+  };
+
   /** その項目が使えるか。条件の判定はダンジョンや店と同じ仕組みを使う */
   HomeScene.prototype._isEntryUnlocked = function (entry) {
     if (!entry.unlockedBy) return true;
@@ -294,7 +303,19 @@
     // 初めて拠点を開いたときの説明。
     // 知らせを出したときは重ならないよう、次に開いたときへ回す
     if (this.game.tutorial && !this.notice.isActive()) {
-      this.tutorial.show(this.game.tutorial.take("homeReturn"));
+      var steps = this.game.tutorial.take("homeReturn");
+      // 書の説明（v1.8.0）。予選を勝ち抜いて「書」が使えるようになってから、初めて拠点を開いたとき
+      if (NS.Qualifier && NS.Qualifier.isPassed && NS.Qualifier.isPassed(this.game)) {
+        steps = steps.concat(this.game.tutorial.take("booksOpen"));
+      }
+      // 工房・加護の説明（v1.8.0）。拠点の項目が開いてから、初めて拠点を開いたとき
+      if (this._isEntryUnlocked(this._menuEntry("craft"))) {
+        steps = steps.concat(this.game.tutorial.take("craftOpen"));
+      }
+      if (this._isEntryUnlocked(this._menuEntry("blessing"))) {
+        steps = steps.concat(this.game.tutorial.take("blessingOpen"));
+      }
+      this.tutorial.show(steps);
     }
   };
 

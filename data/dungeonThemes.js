@@ -355,6 +355,53 @@
           minDriftX: -4, maxDriftX: 4
         }
       }
+    },
+
+    /**
+     * 涵養の穴（v1.8.0。滴る鍾乳洞から。見た目は作者に任された 2026-11-27）。
+     * 青白い石灰の壁と、いつも濡れている暗い床。壁の下の縁は垂れた鍾乳石、床にはところどころ水の光。
+     * ★ 冷えた最深部（depths）の青と並べても別の場所と分かるよう、こちらは緑みのある水色・壁を明るめにした。
+     * 戦いでは雫がまっすぐ落ちる（粒が下へ速く動く）
+     */
+    drip: {
+      name: "雫の落ちる鍾乳洞",
+      background: "#03080b",
+      tiles: {
+        wall:   "#3e5866",
+        floor:  "#0b161c",
+        stairs: "#1f3a48"
+      },
+      stairsMark: { color: "#8fe0f4" },
+      tilePatterns: {
+        wall: [
+          { type: "speckle", colors: ["#4e6c7a", "#2c4250"], count: 6, size: 2 },
+          { type: "roots", color: "#6a90a0", count: 2, length: 10, chance: 0.6 },      // 水の流れた筋
+          { type: "edge", side: "bottom", color: "#5c7e8e", tipColor: "#b4e2ee", width: 4 }  // 垂れた鍾乳石
+        ],
+        floor: [
+          { type: "speckle", colors: ["#10202a", "#060e13"], count: 6, size: 2 },
+          { type: "speckle", colors: ["#3c8aa8"], count: 1, size: 1 }               // 水の光
+        ]
+      },
+      decorations: {
+        count: { min: 10, max: 16 },
+        table: [
+          { sprite: "decoStalagmite", weight: 1.0 },
+          { sprite: "decoPuddle",     weight: 0.8 },
+          { sprite: "decoPebble",     weight: 0.4 }
+        ]
+      },
+      // 戦闘の背景：暗い水色。天井から雫が落ちてくる
+      battle: {
+        gradientTop: "#0f2a38",
+        gradientBottom: "#03080c",
+        groundY: 346, groundColor: "#06121a", edgeColor: "#3f8098",
+        particles: {
+          count: 22, color: "#a4e2f4", minSize: 1, maxSize: 2,
+          minSpeed: 22, maxSpeed: 46, minAlpha: 0.10, maxAlpha: 0.42,
+          minDriftX: 0, maxDriftX: 0
+        }
+      }
     }
   };
 })(window.MyGame);

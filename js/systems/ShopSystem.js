@@ -103,6 +103,8 @@
     for (var id in items) {
       if (!Object.prototype.hasOwnProperty.call(items, id)) continue;
       if (items[id].category !== "book" || !items[id].book) continue;
+      // 写本堂で売らない書（v1.8.0。特性の書の book.shop が false。作者の表）
+      if (items[id].book.shop === false) continue;
       // 判明している技・特性の書だけ並べる（v1.6.2。作者の指定。図鑑で名前が見えているもの）
       if (!this._isBookKnown(items[id])) continue;
       // 特性の書（v1.6.0）は「特性」の小見出しにまとめる（属性の後ろ）

@@ -89,7 +89,7 @@
  * hits          : 何回当てるか（二連斬り＝2）。1回ずつ命中を判定する
  * randomTargets : true なら hits の1回ごとに、向かい側の盤面からでたらめに1体選ぶ（歯車投げ。v1.3.0）
  * maxDamage     : 1回あたりのダメージの上限（二連斬り＝200。何回か当てる技は1回ずつに掛かる）。書かなければ上限なし
- * modifierSe    : 強化・弱体が掛かった瞬間の音を変えたいときだけ書く（null で鳴らさない。〇〇ベール）。
+ * modifierSe    : 強化・弱体が掛かった瞬間の音を変えたいときだけ書く（null で鳴らさない。エレメントバリア）。
  *                 書かなければ buff / debuff が鳴る（BattleScene._playModifierSe）
  * description   : 技を選ぶときに出る説明文
  * fieldUse      : 探索中（戦闘の外）に、仲間画面の「技を使う」から使えるか。
@@ -639,12 +639,12 @@
       evadable: false,
       canCritical: false,
       status: { id: "paralysis", chance: 0.15 },
-      description: "雷を降らせ、相手全体を撃つ。まひさせることがある。"
+      description: "雷を降らせ、相手全体を撃つ。麻痺させることがある。"
     },
 
     /**
      * --- 専用技（愛情度が「絆」に届くと覚える。data/monsters.js の bondReward） ---
-     * 効果・数値は作者が決めたもの（早見表/絆と記録.txt）。
+     * 効果・数値は作者が決めたもの（早見表/モンスターと絆.txt の「絆と記録」）。
      * その種族らしい働きで個性を出す。どれも覚えるのはその種族だけ（learnset には書かない）
      */
 
@@ -661,11 +661,13 @@
       target: "self",
       element: "none",
       effect: "standWall",
+      se: "guard",
+      modifierSe: null,   // 掛かったときの強化の音は鳴らさず、se_guard だけ（v1.8.0）
       cover: true,
       modifier: {
         duration: 1,
         message: "{target} は 仲間の前に立ち塞がった!",
-        popup: "立ち塞がる",
+        popup: "全ダメージ引き受け",
         effects: [ { type: "damageTaken", value: 0.75 } ]
       },
       description: "使ったターンのあいだ、仲間への攻撃をすべて引き受ける。受けるダメージは少し減る。"
@@ -762,10 +764,11 @@
       id: "blazeFang",
       name: "焔牙",
       kind: "slash",
-      power: 1.5,
+      // v1.8.0（2026-11-25 作者の指定）：×1.5・クリティカル率 +40% → ×1.66・+55%
+      power: 1.66,
       pp: 8,   // v1.5.1 で 6 → 8（作者の指定 2026-11-22）
       accuracy: 1.0,
-      criticalBonus: 0.4,
+      criticalBonus: 0.55,
       target: "enemy",
       element: "fire",
       effect: "blazeFang",
@@ -905,58 +908,41 @@
         effects: [ { type: "damageDealt", value: 1.20 } ] },
       description: "自分の力を共鳴させ、3ターンのあいだ与えるダメージを上げる。"
     },
-    // 〇〇ベール（属性ごとに7つ）。主の得意属性を読んで先に張る技。
-    // 音は7つとも se_veil だけ（作者の指定。modifierSe: null で、掛かったときの強化の音は鳴らさない）。
-    // 属性は守る属性そのもの（2026-10-22 作者の指定。前は7つとも無属性で、図鑑・技の一覧で「なし」と出ていた）。
-    // ダメージを与えない技なので、属性は表示・並べ替え・共鳴の響きの色にだけ効く（相手の耐性で軽くなったりはしない）
-    wardSongFire: {
-      id: "wardSongFire", name: "ファイアベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "fire", effect: "veilFire",
-      modifier: { duration: 3, message: "{target} は 火に 強くなった!", popup: "火耐性上昇",
-        effects: [ { type: "resistBonus", element: "fire", value: 3 } ] },
-      description: "味方全体の火への耐性を、3ターンのあいだ上げる。"
+    // エレメントバリア（v1.8.0。作者の仕様 2026-11-26）。〇〇ベール7つの代わり（敵の属性がわからないと使えず、7つも枠を取っていたため）。
+    // 味方全体・全属性への耐性 +3・3ターン・PP8。音はベールと同じ se_veil（modifierSe: null で、掛かったときの強化の音は鳴らさない）。
+    // 覚えるのはスライム 27・ハイバネ 28・コダマ 28・コウモリ 33 だけ（作者）。書は無い（作者 2026-11-26）
+    elementBarrier: {
+      id: "elementBarrier", name: "エレメントバリア", kind: "resonance", power: 0, pp: 8, accuracy: 1.0, se: "veil", modifierSe: null,
+      target: "allAllies", element: "none", effect: "elementBarrier",
+      modifier: { duration: 3, message: "{target} は すべての属性に 強くなった!", popup: "全属性耐性上昇",
+        effects: [ { type: "resistBonus", element: "all", value: 3 } ] },
+      description: "味方全体の、すべての属性への耐性を3ターンのあいだ上げる。"
     },
-    wardSongWater: {
-      id: "wardSongWater", name: "アクアベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "water", effect: "veilWater",
-      modifier: { duration: 3, message: "{target} は 水に 強くなった!", popup: "水耐性上昇",
-        effects: [ { type: "resistBonus", element: "water", value: 3 } ] },
-      description: "味方全体の水への耐性を、3ターンのあいだ上げる。"
+
+    /**
+     * 反射の技（v1.8.0。作者の仕様 2026-11-26）。名前と覚える種族は作者が決めた（2026-11-27。カウンターはリバーサルに）
+     *   どちらも共鳴・味方1体（自分も選べる）・3ターン・PP12。強化として掛かる（黄昏の風・波さらい・ジャッジメントで消える）
+     *   リフレクト … 相手の共鳴を返す（ダメージも、状態異常・弱体などの追加の効果も。即死も返る）
+     *   リバーサル … 相手の通常攻撃と斬撃を返す
+     *   返したダメージは、撃った側が自分に当てたものとして計算し直す（撃った側の攻撃・防御・強化・弱体・耐性で決まる）。
+     *   返した側はダメージを受けない。返った技はもう一度は返らない。全体の技は、返す相手のぶんだけ返る。
+     *   撃った側に「攻撃の強化」（攻撃力・与えるダメージだけを上げる強化：ブレイブ・ウォークライ・オーバードライブ・鼓舞の舞・ハウリング）が
+     *   掛かっていれば、返されずにそのまま当たる（ちからため・王の号令は入らない）。味方から受けた技は返さない。
+     *   働かせるのは BattleSystem._reflectorFor（効果の種類 reflect。against: "resonance" / "physical"）
+     */
+    reflect: {
+      id: "reflect", name: "リフレクト", kind: "resonance", power: 0, pp: 12, accuracy: 1.0,
+      target: "ally", element: "none", effect: "reflectWall",
+      modifier: { duration: 3, message: "{target} の まわりに 共鳴を はね返す 壁が できた!", popup: "共鳴を反射",
+        effects: [ { type: "reflect", against: "resonance" } ] },
+      description: "味方1体のまわりに壁を張り、3ターンのあいだ相手の共鳴をはね返す。攻撃の強化が掛かった相手の共鳴は防げない。"
     },
-    wardSongWind: {
-      id: "wardSongWind", name: "ウィンドベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "wind", effect: "veilWind",
-      modifier: { duration: 3, message: "{target} は 風に 強くなった!", popup: "風耐性上昇",
-        effects: [ { type: "resistBonus", element: "wind", value: 3 } ] },
-      description: "味方全体の風への耐性を、3ターンのあいだ上げる。"
-    },
-    wardSongEarth: {
-      id: "wardSongEarth", name: "ストーンベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "earth", effect: "veilEarth",
-      modifier: { duration: 3, message: "{target} は 地に 強くなった!", popup: "地耐性上昇",
-        effects: [ { type: "resistBonus", element: "earth", value: 3 } ] },
-      description: "味方全体の地への耐性を、3ターンのあいだ上げる。"
-    },
-    wardSongThunder: {
-      id: "wardSongThunder", name: "サンダーベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "thunder", effect: "veilThunder",
-      modifier: { duration: 3, message: "{target} は 雷に 強くなった!", popup: "雷耐性上昇",
-        effects: [ { type: "resistBonus", element: "thunder", value: 3 } ] },
-      description: "味方全体の雷への耐性を、3ターンのあいだ上げる。"
-    },
-    wardSongLight: {
-      id: "wardSongLight", name: "ライトベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "light", effect: "veilLight",
-      modifier: { duration: 3, message: "{target} は 光に 強くなった!", popup: "光耐性上昇",
-        effects: [ { type: "resistBonus", element: "light", value: 3 } ] },
-      description: "味方全体の光への耐性を、3ターンのあいだ上げる。"
-    },
-    wardSongDark: {
-      id: "wardSongDark", name: "ダークベール", kind: "resonance", power: 0, pp: 4, accuracy: 1.0, se: "veil", modifierSe: null,
-      target: "allAllies", element: "dark", effect: "veilDark",
-      modifier: { duration: 3, message: "{target} は 闇に 強くなった!", popup: "闇耐性上昇",
-        effects: [ { type: "resistBonus", element: "dark", value: 3 } ] },
-      description: "味方全体の闇への耐性を、3ターンのあいだ上げる。"
+    reversal: {
+      id: "reversal", name: "リバーサル", kind: "resonance", power: 0, pp: 12, accuracy: 1.0,
+      target: "ally", element: "none", effect: "reversal",
+      modifier: { duration: 3, message: "{target} は 攻撃を 返す 構えを とった!", popup: "攻撃を反射",
+        effects: [ { type: "reflect", against: "physical" } ] },
+      description: "味方1体に返しの構えを取らせ、3ターンのあいだ相手の通常攻撃と斬撃をはね返す。攻撃の強化が掛かった相手の攻撃は防げない。"
     },
 
     // B. 弱体（相手に掛ける。主など弱体の耐性を持つ相手には入らないことがある）
@@ -970,11 +956,12 @@
       description: "体ごとぶつかって守りを崩す。当たった相手は3ターンのあいだ防御が下がる。"
     },
     slowDance: {
-      id: "slowDance", name: "足止めの舞", kind: "dance", power: 0, pp: 3, accuracy: 1.0,
+      // v1.8.0（2026-11-25 作者の指定）：素早さ ×0.5・PP3 → ×0.8・PP7（強すぎた）
+      id: "slowDance", name: "足止めの舞", kind: "dance", power: 0, pp: 7, accuracy: 1.0,
       target: "enemy", element: "none", effect: "entangle",
       modifier: { duration: 3, message: "{target} の 足が 重くなった!",
-        effects: [ { type: "statMultiplier", stat: "speed", value: 0.5 } ] },
-      description: "まとわりつく舞で、相手1体の素早さを3ターンのあいだ大きく下げる。"
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.8 } ] },
+      description: "まとわりつく舞で、相手1体の素早さを3ターンのあいだ下げる。"
     },
     intimidRoar: {
       id: "intimidRoar", name: "威圧の咆哮", kind: "breath", power: 0, pp: 7, accuracy: 1.0,
@@ -1048,7 +1035,7 @@
     //          作戦で使うのは reviveSafeHp を書いた作戦だけ（data/battle.js。いまは「仲間を守る」）
     resurrect: {
       id: "resurrect", name: "リザレクト", kind: "resonance", power: 0, pp: 10, accuracy: 1.0,
-      target: "ally", element: "none", effect: "reviveRise",
+      target: "ally", element: "none", effect: "reviveRise", se: "revive",
       revive: { hpRatio: 0.55, chance: 0.5 },
       description: "倒れた味方1体を、半分の確率で起こす。起きるとHPが55%まで戻る。"
     },
@@ -1086,7 +1073,7 @@
     },
     chargeUp: {
       id: "chargeUp", name: "ちからため", kind: "body", power: 0, pp: 0, accuracy: 1.0,
-      target: "self", element: "none", effect: "gather",
+      target: "self", element: "none", effect: "gather", se: "charge",
       charge: { min: 1.85, max: 2.25 },
       // 乗るのは1体の通常攻撃・体技・斬撃だけ（v1.4.1 作者の指定。BattleSystem._chargeApplies）。
       // 次の自分の手番で乗る技を使わなければ消える（動けなかったときも）。ためている間に使っても何も起きない
@@ -1106,7 +1093,7 @@
     thunderSlash: {
       id: "thunderSlash", name: "稲妻斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
       // 音は当たった瞬間に雷（サンダーと同じ音）。出した瞬間には鳴らさない（斬ってから落ちる）
-      target: "enemy", element: "thunder", effect: "thunderSlash", hitSe: "thunder",
+      target: "enemy", element: "thunder", effect: "thunderSlash", se: "slashThunder", hitSe: "thunder",
       description: "稲妻をまとった刃で、相手1体を斬りつける。"
     },
     // 歯車投げ（v1.3.0。千年樹の根底の主の専用技。作者の指定 2026-11-03：命中100%・無・3回・斬撃・1回ごとにでたらめな相手・威力0.7）。
@@ -1116,29 +1103,29 @@
       id: "gearThrow", name: "歯車投げ", kind: "slash", power: 0.7, pp: 6, accuracy: 1.0,
       target: "enemy", element: "none", effect: "gearHit",
       hits: 3, randomTargets: true,
-      description: "体の歯車を外して投げつける。3回、でたらめな相手に当たる。"
+      description: "体の歯車を外して投げつける。ランダムな対象に3回当たる。"
     },
     // 属性の斬撃（v1.3.0。ウェポンの技。作者の指定 2026-11-04：ウェポンは火・水・風・地の斬撃を使う。名前は私の案を作者が了承）。
     // 岩砕斬りの名前は作者の指定（2026-11-05）。火炎斬りも作者が了承（2026-11-05。焔牙はフレイミンの絆の専用技なので使わない）。
     // 威力と PP は稲妻斬りと同じ（×1.2・PP4）で、仮
     flameSlash: {
       id: "flameSlash", name: "火炎斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
-      target: "enemy", element: "fire", effect: "flameSlash",
+      target: "enemy", element: "fire", effect: "flameSlash", se: "slashFire",
       description: "炎をまとった刃で、相手1体を斬りつける。"
     },
     flowSlash: {
       id: "flowSlash", name: "流水斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
-      target: "enemy", element: "water", effect: "flowSlash",
+      target: "enemy", element: "water", effect: "flowSlash", se: "slashWater",
       description: "水流をまとった刃で、相手1体を斬りつける。"
     },
     galeSlash: {
       id: "galeSlash", name: "疾風斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
-      target: "enemy", element: "wind", effect: "galeSlash",
+      target: "enemy", element: "wind", effect: "galeSlash", se: "slashWind",
       description: "風を切る速さで、相手1体を斬りつける。"
     },
     rockSlash: {
       id: "rockSlash", name: "岩砕斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
-      target: "enemy", element: "earth", effect: "rockSlash",
+      target: "enemy", element: "earth", effect: "rockSlash", se: "slashEarth",
       description: "岩も砕く重い刃で、相手1体を斬りつける。"
     },
     // ウェポン（絆の技。名前・PP・命中・威力・火と地の混合・全体は作者の指定 2026-11-05）。
@@ -1277,6 +1264,7 @@
       target: "enemy",
       element: "none",
       effect: "reap",
+      se: "death",
       // 技を出した瞬間、シニガミのまわりに出す前ぶれ（data/effects.js の reapOmen。種類の演出の代わり）
       casterEffect: "reapOmen",
       hitSe: "slash",
@@ -1289,7 +1277,7 @@
     // 死の踊り。相手全体に即死を 25%。よけられない（説明には書かない。作者）
     deathDance: {
       id: "deathDance", name: "死の踊り", kind: "dance", power: 0, pp: 10, accuracy: 1.0,
-      target: "allEnemies", element: "none", effect: "deathMark",
+      target: "allEnemies", element: "none", effect: "deathMark", se: "death",
       evadable: false, canCritical: false,
       status: { id: "instantDeath", chance: 0.5 },   // v1.4.1：25% → 50%
       description: "死を招く踊りで、相手全体を即死させることがある。"
@@ -1298,7 +1286,7 @@
     // デス。相手1体に即死を 75%（v1.4.1：35% → 90%。v1.5.0：90% → 75%。耐性3で52.5%・5で37.5%）
     death: {
       id: "death", name: "デス", kind: "resonance", power: 0, pp: 6, accuracy: 1.0,
-      target: "enemy", element: "none", effect: "deathMark",
+      target: "enemy", element: "none", effect: "deathMark", se: "death",
       status: { id: "instantDeath", chance: 0.75 },
       description: "死の響きで、相手1体を即死させることがある。"
     },
@@ -1306,7 +1294,7 @@
     // デスラ。相手全体に即死を 50%（v1.4.1：25% → 65%。v1.5.0：65% → 50%）。全体の技の決まりどおり、よけられない・クリティカルなし
     deathra: {
       id: "deathra", name: "デスラ", kind: "resonance", power: 0, pp: 12, accuracy: 1.0,
-      target: "allEnemies", element: "none", effect: "deathMark",
+      target: "allEnemies", element: "none", effect: "deathMark", se: "death",
       evadable: false, canCritical: false,
       status: { id: "instantDeath", chance: 0.5 },
       description: "死の響きで、相手全体を即死させることがある。"
@@ -1322,6 +1310,489 @@
       dispel: {},
       showInDex: false,
       description: "波で洗い流し、相手1体に掛かっている強化をすべて消す。ためた力も消える。必ず当たる。"
+    },
+
+    /**
+     * --- 技の大幅追加（v1.8.0・2026-11-25。数値・範囲・効き目は作者が決めたもの） ---
+     * もとは デスクトップの「技の追加案_ブレスと強化.md」「覚える技_確定.md」と 早見表/技の一覧_全部.md、
+     * 決めごとは game/技の追加_確認.md（作者が確かめた表）。説明文は私が書いた（作者が見て直す）。
+     * 演出（effect）はいまある型を仮に使っている。新しい絵は作者が見て決める
+     * 新しい書き方（BattleSystem）：
+     *   hitsMax       … 回数を hits〜hitsMax から毎回でたらめ（_rollHits）
+     *   critOnly      … クリティカルのときだけ当たる（会心斬り）
+     *   priority      … そのターンの最初に動く（先手打ち。特性の先手と同じ組で、素早さの順）
+     *   guard         … かばう（ターンの頭。選んだ味方1体への攻撃を代わりに受ける。_applyGuards）
+     *   ppShare       … 自分のいまの PP の半分を味方に分ける（分け与え）
+     *   notSelf       … 味方を選ぶ技で、自分は選べない
+     *   cleanse       … 弱体をすべて消す（リフレッシュ）
+     *   heal.full     … HP を全快（キュアリス）。焦熱のときは減っているぶんの半分
+     *   enemyRevive   … 敵も倒れた仲間を起こすのに使う（リザレクション）
+     *   extraStatus   … 2つ目の状態異常（セイントノヴァの封印）
+     *   modifier.chance … 弱体が掛かる確率（書かなければ必ず。弱体への耐性はそのあと）
+     *   modifier.name / endMessage … 弱体の名前（焦熱・裂傷）と、切れたときの文
+     *   damageFormula … "normalRate"（斬撃と同じ式）か { stat, factor, defenseFactor }（彗星のサンバ・不動のボレロ）
+     *   powerText     … 図鑑・技の説明で、威力の代わりに出す言葉（式で決まる技）
+     */
+
+    // A. ブレス（tier2 は火・水・闇だけ。最上位は全属性）
+    scorchBreath: {
+      id: "scorchBreath", name: "灼熱の息", kind: "breath", power: 30, pp: 7, accuracy: 1.0,
+      target: "allEnemies", element: "fire", effect: "scorchBreath", effectAt: "center", se: "fireBreath",
+      description: "灼けつく息を吐き、相手全体を焼く。"
+    },
+    whirlpool: {
+      id: "whirlpool", name: "大渦", kind: "breath", power: 28, pp: 7, accuracy: 1.0,
+      target: "allEnemies", element: "water", effect: "whirlpool", effectAt: "center", se: "wave",
+      modifier: { duration: 2, chance: 0.3, message: "{target} は 渦に 足を取られた!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.8 } ] },
+      description: "大きな渦を起こして相手全体を呑む。2ターンのあいだ素早さを下げることがある。"
+    },
+    deepBreath: {
+      id: "deepBreath", name: "深淵の息", kind: "breath", power: 30, pp: 7, accuracy: 1.0,
+      target: "allEnemies", element: "dark", effect: "deepBreath", effectAt: "center", se: "darkBreath",
+      status: { id: "curse", chance: 0.15 },
+      description: "深淵の冷たい息を吐き、相手全体を包む。呪うことがある。"
+    },
+    scorchingHell: {
+      id: "scorchingHell", name: "焦熱地獄", kind: "breath", power: 140, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "fire", effect: "scorchingHell", effectAt: "center", se: "fireBreathMax",
+      modifier: { duration: 3, name: "焦熱", popup: "回復量減少",
+        message: "{target} は 焦熱に包まれた! 受ける回復が 半分になった!",
+        endMessage: "{target} の 焦熱が おさまった。",
+        effects: [ { type: "healReceived", value: 0.5 } ] },
+      description: "地獄の業火を吐き、相手全体を焼き尽くす。3ターンのあいだ、焦熱を付与する。"
+    },
+    tidalBreath: {
+      id: "tidalBreath", name: "怒濤海嘯", kind: "breath", power: 125, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "water", effect: "tidalBreath", effectAt: "center", se: "waterBreathMax",
+      modifier: { duration: 3, message: "{target} は 大波に 足を取られた!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.7 } ] },
+      description: "押し寄せる大波で相手全体を呑み込む。3ターンのあいだ素早さを下げる。"
+    },
+    netherBreath: {
+      id: "netherBreath", name: "冥府魔道", kind: "breath", power: 125, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "dark", effect: "netherBreath", effectAt: "center", se: "darkBreathMax",
+      status: { id: "curse", chance: 0.6 },
+      description: "冥府の闇を吐き出し、相手全体を包む。呪うことがある。"
+    },
+    bladeStorm: {
+      id: "bladeStorm", name: "千刃旋風", kind: "breath", power: 120, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "wind", effect: "bladeStorm", effectAt: "center", se: "windBreathMax",
+      modifier: { duration: 3, name: "裂傷", popup: "スリップダメージ",
+        message: "{target} は 裂傷を負った!",
+        endMessage: "{target} の 裂傷が ふさがった。",
+        effects: [ { type: "slipDamage", min: 30, max: 50 } ] },
+      description: "千の刃を含む旋風を吐き、相手全体を切り刻む。3ターンのあいだ、裂傷を付与する。"
+    },
+    earthCollapse: {
+      id: "earthCollapse", name: "大地崩落", kind: "breath", power: 130, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "earth", effect: "earthCollapse", effectAt: "center", se: "earthBreathMax",
+      modifier: { duration: 3, message: "{target} の 足もとが 崩れた!", popup: "被ダメージ上昇",
+        effects: [ { type: "damageTaken", value: 1.2 } ] },
+      description: "大地を崩す息を吐き、相手全体を落とす。3ターンのあいだ、受けるダメージが増える。"
+    },
+    // 光芒万丈は使い手がまだいない。使い手ができるまで図鑑に出さない（波さらいと同じ。作者の指定 2026-11-25）
+    radiantBreath: {
+      id: "radiantBreath", name: "光芒万丈", kind: "breath", power: 125, pp: 40, accuracy: 1.0,
+      target: "allEnemies", element: "light", effect: "radiantBreath", effectAt: "center", se: "lightBreathMax",
+      status: { id: "blind", chance: 0.9 },
+      showInDex: false,
+      description: "まばゆい光の息を放ち、相手全体を射る。盲目にすることがある。"
+    },
+    // ★ 強化を消す 20% は作者が「あとで弱めるかも」
+    thunderHeaven: {
+      id: "thunderHeaven", name: "万雷轟天", kind: "breath", power: 140, pp: 50, accuracy: 1.0,
+      target: "allEnemies", element: "thunder", effect: "thunderHeaven", effectAt: "center", se: "thunderBreathMax",
+      status: { id: "paralysis", chance: 0.5 },
+      dispel: { chance: 0.2 },
+      description: "天を揺るがす万の雷を吐き、相手全体を撃つ。麻痺させることがあり、強化を消すこともある。"
+    },
+
+    // B. 強化（共鳴・3ターン）。同じ能力の強化は、いちばん強いものだけ効く（EffectSystem.collectEffects）
+    warCry: {
+      id: "warCry", name: "ウォークライ", kind: "resonance", power: 0, pp: 15, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "warCry",
+      modifier: { duration: 3, message: "{target} の 闘志が 高まった!",
+        effects: [ { type: "statMultiplier", stat: "attack", value: 1.5 } ] },
+      description: "鬨の声を響かせ、味方全体の攻撃を3ターンのあいだ上げる。"
+    },
+    protection: {
+      id: "protection", name: "プロテクション", kind: "resonance", power: 0, pp: 12, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "protection",
+      modifier: { duration: 3, message: "{target} の 守りが 高まった!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 1.5 } ] },
+      description: "守りの響きで味方全体を包み、防御を3ターンのあいだ上げる。"
+    },
+    quickle: {
+      id: "quickle", name: "クイックル", kind: "resonance", power: 0, pp: 13, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "quickle",
+      modifier: { duration: 3, message: "{target} の 足が 軽くなった!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 1.5 } ] },
+      description: "風のような響きで、味方全体の素早さを3ターンのあいだ上げる。"
+    },
+    overdrive: {
+      id: "overdrive", name: "オーバードライブ", kind: "resonance", power: 0, pp: 22, accuracy: 1.0,
+      target: "ally", element: "none", effect: "overdrive",
+      modifier: { duration: 3, message: "{target} の 力が あふれ出した!",
+        effects: [ { type: "statMultiplier", stat: "attack", value: 2.0 } ] },
+      description: "限界を超える響きで、味方1体の攻撃を3ターンのあいだ大幅に上げる。"
+    },
+    aegis: {
+      id: "aegis", name: "アイギス", kind: "resonance", power: 0, pp: 16, accuracy: 1.0,
+      target: "ally", element: "none", effect: "aegis",
+      modifier: { duration: 3, message: "{target} は 神盾に 守られた!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 2.0 } ] },
+      description: "神の盾の響きで、味方1体の防御を3ターンのあいだ大幅に上げる。"
+    },
+    accel: {
+      id: "accel", name: "アクセル", kind: "resonance", power: 0, pp: 18, accuracy: 1.0,
+      target: "ally", element: "none", effect: "accel",
+      modifier: { duration: 3, message: "{target} の 動きが 加速した!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 2.0 } ] },
+      description: "加速する響きで、味方1体の素早さを3ターンのあいだ大幅に上げる。"
+    },
+
+    // C. 弱体（共鳴・3ターン。弱体への耐性が掛かる）
+    crack: {
+      id: "crack", name: "クラック", kind: "resonance", power: 0, pp: 5, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "crack",
+      modifier: { duration: 3, message: "{target} の 守りに ひびが入った!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 0.7 } ] },
+      description: "守りにひびを入れる響きで、相手1体の防御を3ターンのあいだ下げる。"
+    },
+    slow: {
+      id: "slow", name: "スロウ", kind: "resonance", power: 0, pp: 6, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "slow",
+      modifier: { duration: 3, message: "{target} の 足が 重くなった!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.7 } ] },
+      description: "動きを鈍らせる響きで、相手1体の素早さを3ターンのあいだ下げる。"
+    },
+    collapse: {
+      id: "collapse", name: "コラプス", kind: "resonance", power: 0, pp: 11, accuracy: 1.0,
+      target: "allEnemies", element: "none", effect: "collapse",
+      evadable: false, canCritical: false,
+      modifier: { duration: 3, message: "{target} の 守りが 崩れた!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 0.7 } ] },
+      description: "守りを崩す響きで、相手全体の防御を3ターンのあいだ下げる。"
+    },
+    gravity: {
+      id: "gravity", name: "グラビティ", kind: "resonance", power: 0, pp: 15, accuracy: 1.0,
+      target: "allEnemies", element: "none", effect: "gravity",
+      evadable: false, canCritical: false,
+      modifier: { duration: 3, message: "{target} の 体が 重くなった!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.7 } ] },
+      description: "重さを掛ける響きで、相手全体の素早さを3ターンのあいだ下げる。"
+    },
+    shatterArmor: {
+      id: "shatterArmor", name: "シャター", kind: "resonance", power: 0, pp: 16, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "shatterArmor",
+      modifier: { duration: 3, message: "{target} の 守りが 砕けた!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 0.5 } ] },
+      description: "守りを砕く響きで、相手1体の防御を3ターンのあいだ大きく下げる。"
+    },
+    bind: {
+      id: "bind", name: "バインド", kind: "resonance", power: 0, pp: 25, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "bind",
+      modifier: { duration: 3, message: "{target} は 縛りつけられた!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.5 } ] },
+      description: "縛りつける響きで、相手1体の素早さを3ターンのあいだ大きく下げる。"
+    },
+
+    // D. 回復と蘇生（共鳴）
+    curaris: {
+      id: "curaris", name: "キュアリス", kind: "resonance", power: 0, pp: 10, accuracy: 1.0,
+      target: "ally", element: "none", effect: "curaris",
+      heal: { full: true },
+      description: "味方1体のHPをすべて回復する。"
+    },
+    curarisAll: {
+      id: "curarisAll", name: "キュアリスオール", kind: "resonance", power: 0, pp: 40, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "curarisAll",
+      heal: { full: true },
+      description: "味方全体のHPをすべて回復する。"
+    },
+    // 敵も使う（作者の指定 2026-11-25）。起こされた相手を倒し直しても、経験値・お金・落とし物は1回ぶんだけ
+    resurrection: {
+      id: "resurrection", name: "リザレクション", kind: "resonance", power: 0, pp: 25, accuracy: 1.0,
+      target: "ally", element: "none", effect: "resurrection", se: "revive",
+      revive: { hpRatio: 1.0, chance: 1.0 },
+      enemyRevive: true,
+      description: "倒れた味方1体を必ず起こし、HPをすべて回復する。"
+    },
+
+    // E. 支える技
+    refresh: {
+      id: "refresh", name: "リフレッシュ", kind: "resonance", power: 0, pp: 6, accuracy: 1.0,
+      target: "ally", element: "none", effect: "refresh",
+      cleanse: true,
+      description: "味方1体に掛かっている弱体を、すべて消す。"
+    },
+    hush: {
+      id: "hush", name: "ハッシュ", kind: "resonance", power: 0, pp: 10, accuracy: 1.0,
+      target: "allEnemies", element: "none", effect: "hush",
+      evadable: false, canCritical: false,
+      status: { id: "seal", chance: 0.5 },
+      description: "静寂の響きを広げ、相手全体を封印にすることがある。"
+    },
+    // かばう：ターンの頭に出る。選んだ味方1体への攻撃を代わりに受ける（減らない）。必中の技はかばえない
+    guardAlly: {
+      id: "guardAlly", name: "かばう", kind: "body", power: 0, pp: 8, accuracy: 1.0,
+      target: "ally", element: "none", effect: "guardAlly", se: "guard",
+      guard: true, notSelf: true,
+      description: "このターン、味方1体への攻撃を代わりに受ける。自分は選べない。"
+    },
+    sharePp: {
+      id: "sharePp", name: "分け与え", kind: "body", power: 0, pp: 0, accuracy: 1.0,
+      target: "ally", element: "none", effect: "sharePp",
+      ppShare: true, notSelf: true,
+      description: "自分のいまのPPの半分を、味方1体に分ける。自分は選べない。"
+    },
+    quickStrike: {
+      id: "quickStrike", name: "先手打ち", kind: "body", power: 0.8, pp: 3, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "quickStrike", se: "senteuchi",
+      priority: true,
+      description: "相手1体に素早く打ちかかる。必ずそのターンの最初に動く。"
+    },
+    duskWind: {
+      id: "duskWind", name: "黄昏の風", kind: "body", power: 0, pp: 18, accuracy: 1.0,
+      target: "allEnemies", element: "none", effect: "duskWind", effectAt: "center", se: "wind",
+      sureHit: true,
+      dispel: {},
+      description: "黄昏の風を吹かせ、相手全体に掛かっている強化をすべて消す。"
+    },
+
+    // F. 属性技の3段目・4段目（共鳴）。4段目（tier: 4）は必中で、命中の弱体を受けない
+    blaze: {
+      id: "blaze", name: "ブレイズ", kind: "resonance", power: 70, pp: 16, accuracy: 1.0,
+      target: "enemy", element: "fire", effect: "blazeVortex", se: "flame",
+      criticalBonus: 0.12,
+      description: "燃え盛る炎で、相手1体を焼く。クリティカルが出やすい。"
+    },
+    torrent: {
+      id: "torrent", name: "トレント", kind: "resonance", power: 62, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "water", effect: "torrentJet", se: "wave",
+      drain: 0.15,
+      description: "激しい水流で相手1体を打つ。与えたダメージの一部を吸い取る。"
+    },
+    cyclone: {
+      id: "cyclone", name: "サイクロン", kind: "resonance", power: 52, pp: 12, accuracy: 1.0,
+      target: "allEnemies", element: "wind", effect: "cycloneFunnel", se: "gale",
+      evadable: false, canCritical: false,
+      description: "渦巻く風で、相手全体を切り裂く。"
+    },
+    rockBurst: {
+      id: "rockBurst", name: "ロックバースト", kind: "resonance", power: 60, pp: 14, accuracy: 1.0,
+      target: "enemy", element: "earth", effect: "rockBurst", se: "rockSpike",
+      modifier: { duration: 2, message: "{target} の 守りに ひびが入った!", popup: "被ダメージ上昇",
+        effects: [ { type: "damageTaken", value: 1.15 } ] },
+      description: "岩を炸裂させて相手1体を打つ。2ターンのあいだ、受けるダメージが増える。"
+    },
+    prism: {
+      id: "prism", name: "プリズム", kind: "resonance", power: 66, pp: 15, accuracy: 1.0,
+      target: "enemy", element: "light", effect: "prism", se: "shine",
+      status: { id: "blind", chance: 0.5 },
+      description: "分かれた光で相手1体を射る。盲目にすることがある。"
+    },
+    abyss: {
+      id: "abyss", name: "アビス", kind: "resonance", power: 68, pp: 15, accuracy: 1.0,
+      target: "enemy", element: "dark", effect: "abyss", se: "darkNebula",
+      status: { id: "curse", chance: 0.3 },
+      description: "深い闇で相手1体を呑む。呪うことがある。"
+    },
+    plasma: {
+      id: "plasma", name: "プラズマ", kind: "resonance", power: 75, pp: 26, accuracy: 1.0,
+      target: "allEnemies", element: "thunder", effect: "plasma", effectAt: "center", se: "volt",
+      evadable: false, canCritical: false,
+      status: { id: "paralysis", chance: 0.2 },
+      description: "荒れ狂う電光で、相手全体を撃つ。麻痺させることがある。"
+    },
+    inferno: {
+      id: "inferno", name: "インフェルノ", kind: "resonance", power: 160, pp: 28, accuracy: 1.0,
+      target: "enemy", element: "fire", effect: "inferno", se: "fire4",
+      tier: 4, sureHit: true,
+      criticalBonus: 0.25,
+      description: "地の底の業火で、相手1体を焼き尽くす。クリティカルがとても出やすい。必ず当たる。"
+    },
+    maelstrom: {
+      id: "maelstrom", name: "メイルシュトローム", kind: "resonance", power: 130, pp: 20, accuracy: 1.0,
+      target: "enemy", element: "water", effect: "maelstrom", se: "water4",
+      tier: 4, sureHit: true,
+      drain: 0.4,
+      description: "巨大な渦で相手1体を呑み込み、与えたダメージの多くを吸い取る。必ず当たる。"
+    },
+    tempest: {
+      id: "tempest", name: "テンペスト", kind: "resonance", power: 135, pp: 24, accuracy: 1.0,
+      target: "allEnemies", element: "wind", effect: "tempest", effectAt: "center", se: "wind4",
+      tier: 4, sureHit: true, canCritical: false,
+      description: "吹き荒れる嵐で、相手全体を打ちのめす。必ず当たる。"
+    },
+    terraBurst: {
+      id: "terraBurst", name: "テラバースト", kind: "resonance", power: 125, pp: 25, accuracy: 1.0,
+      target: "allEnemies", element: "earth", effect: "terraBurst", effectAt: "center", se: "earth4",
+      tier: 4, sureHit: true, canCritical: false,
+      modifier: { duration: 2, message: "{target} の 守りに ひびが入った!", popup: "被ダメージ上昇",
+        effects: [ { type: "damageTaken", value: 1.15 } ] },
+      description: "大地を炸裂させ、相手全体を打つ。2ターンのあいだ、受けるダメージが増える。必ず当たる。"
+    },
+    saintNova: {
+      id: "saintNova", name: "セイントノヴァ", kind: "resonance", power: 145, pp: 26, accuracy: 1.0,
+      target: "enemy", element: "light", effect: "saintNova", se: "light4",
+      tier: 4, sureHit: true,
+      status: { id: "blind", chance: 0.4 },
+      extraStatus: { id: "seal", chance: 0.4 },
+      description: "聖なる光の爆発で相手1体を射る。盲目や封印にすることがある。必ず当たる。"
+    },
+    grandNebula: {
+      id: "grandNebula", name: "グランドネビュラ", kind: "resonance", power: 130, pp: 24, accuracy: 1.0,
+      target: "allEnemies", element: "dark", effect: "grandNebula", effectAt: "center", se: "dark4",
+      tier: 4, sureHit: true, canCritical: false,
+      status: { id: "curse", chance: 0.25 },
+      description: "果てしない闇の雲で、相手全体を呑み込む。呪うことがある。必ず当たる。"
+    },
+    judgment: {
+      id: "judgment", name: "ジャッジメント", kind: "resonance", power: 155, pp: 40, accuracy: 1.0,
+      target: "enemy", element: "thunder", effect: "judgment", se: "thunder4",
+      tier: 4, sureHit: true,
+      status: { id: "paralysis", chance: 0.4 },
+      dispel: { chance: 0.5 },
+      description: "裁きの雷を落とし、相手1体を撃つ。麻痺させることがあり、強化を消すこともある。必ず当たる。"
+    },
+
+    // G. 斬撃（通常攻撃の基礎 × 倍率）
+    lightSlash: {
+      id: "lightSlash", name: "閃光斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
+      target: "enemy", element: "light", effect: "lightSlash", se: "slashLight",
+      description: "光をまとった刃で、相手1体を斬りつける。"
+    },
+    shadowSlash: {
+      id: "shadowSlash", name: "影斬り", kind: "slash", power: 1.2, pp: 4, accuracy: 1.0,
+      target: "enemy", element: "dark", effect: "shadowSlash", se: "slashDark",
+      description: "影をまとった刃で、相手1体を斬りつける。"
+    },
+    crimsonSlash: {
+      id: "crimsonSlash", name: "紅蓮斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "fire", effect: "crimsonSlash", se: "slashFire",
+      criticalBonus: 0.15,
+      description: "紅蓮の炎の刃で、相手1体を斬りつける。クリティカルが出やすい。"
+    },
+    // ウルヴァーグの絆の技（v1.8.0。名前・斬撃・水・威力1.25・相手1体・必ず先手は作者の指定 2026-11-26）。PP 6 は私の案のまま
+    // 演出は専用の dropCleave（雫が落ちきる前に、水の一閃が雫ごと斬る。data/effects.js）
+    dropCleave: {
+      id: "dropCleave", name: "雫断ち", kind: "slash", power: 1.25, pp: 6, accuracy: 1.0,
+      target: "enemy", element: "water", effect: "dropCleave",
+      priority: true,
+      description: "雫が落ちきるより速く、水の刃で相手1体を斬りつける。必ずそのターンの最初に動く。"
+    },
+    torrentSlash: {
+      id: "torrentSlash", name: "激流斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "water", effect: "torrentSlash", se: "slashWater",
+      drain: 0.15,
+      description: "激流の刃で相手1体を斬りつけ、与えたダメージの一部を吸い取る。"
+    },
+    whirlSlash: {
+      id: "whirlSlash", name: "旋風斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "wind", effect: "whirlSlash", se: "slashWind",
+      modifier: { duration: 2, chance: 0.3, message: "{target} の 足が 重くなった!",
+        effects: [ { type: "statMultiplier", stat: "speed", value: 0.8 } ] },
+      description: "旋風の刃で相手1体を斬りつける。2ターンのあいだ素早さを下げることがある。"
+    },
+    earthSlash: {
+      id: "earthSlash", name: "大地斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "earth", effect: "earthSlash", se: "slashEarth",
+      modifier: { duration: 2, chance: 0.3, message: "{target} の 守りが 崩れた!",
+        effects: [ { type: "statMultiplier", stat: "defense", value: 0.8 } ] },
+      description: "大地を割る刃で相手1体を斬りつける。2ターンのあいだ防御を下げることがある。"
+    },
+    raijinSlash: {
+      id: "raijinSlash", name: "雷神斬り", kind: "slash", power: 1.40, pp: 12, accuracy: 1.0,
+      target: "enemy", element: "thunder", effect: "raijinSlash", se: "slashThunder", hitSe: "thunder",
+      status: { id: "paralysis", chance: 0.15 },
+      description: "雷神の刃で相手1体を斬りつける。麻痺させることがある。"
+    },
+    holySlash: {
+      id: "holySlash", name: "聖光斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "light", effect: "holySlash", se: "slashLight",
+      status: { id: "blind", chance: 0.2 },
+      description: "聖なる光の刃で相手1体を斬りつける。盲目にすることがある。"
+    },
+    darkShadowSlash: {
+      id: "darkShadowSlash", name: "黒影斬り", kind: "slash", power: 1.35, pp: 10, accuracy: 1.0,
+      target: "enemy", element: "dark", effect: "darkShadowSlash", se: "slashDark",
+      status: { id: "curse", chance: 0.15 },
+      description: "黒い影の刃で相手1体を斬りつける。呪うことがある。"
+    },
+    // 1回ずつクリティカルがある（二連斬りと同じ）
+    wildSlash: {
+      id: "wildSlash", name: "乱れ斬り", kind: "slash", power: 0.6, pp: 7, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "wildSlash",
+      hits: 3, hitsMax: 4, randomTargets: true,
+      description: "刃を振り回し、ランダムな対象を3〜4回斬る。"
+    },
+    // 先にふつうの命中、当たったらクリティカルを判定（ふだんの率＋40%）。クリティカルでなければ外れ
+    criticalSlash: {
+      id: "criticalSlash", name: "会心斬り", kind: "slash", power: 1.0, pp: 15, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "criticalSlash",
+      critOnly: true, criticalBonus: 0.4,
+      description: "急所だけを狙って斬る。クリティカルのときだけ当たる。"
+    },
+    sweepSlash: {
+      id: "sweepSlash", name: "薙ぎ払い", kind: "slash", power: 0.75, pp: 8, accuracy: 1.0,
+      target: "allEnemies", element: "none", effect: "sweepSlash", effectAt: "center",
+      canCritical: false,
+      description: "刃を大きく振るい、相手全体を薙ぎ払う。"
+    },
+    allOutSlash: {
+      id: "allOutSlash", name: "渾身斬り", kind: "slash", power: 1.8, pp: 20, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "allOutSlash",
+      canCritical: false,
+      description: "渾身の力で、相手1体を斬りつける。クリティカルは出ない。"
+    },
+
+    // H. 踊り（と ばくれつけん）。踊りの攻撃はかわされる・クリティカルなし。「でたらめ」は1回ごとに選ぶ
+    swordDance: {
+      id: "swordDance", name: "つるぎの舞", kind: "dance", power: 0.4, pp: 15, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "swordDance",
+      damageFormula: "normalRate", canCritical: false,
+      hits: 3, hitsMax: 6, randomTargets: true, maxDamage: 100,
+      description: "刃のように舞い、ランダムな対象を3〜6回斬る。"
+    },
+    burstFist: {
+      id: "burstFist", name: "ばくれつけん", kind: "body", power: 0.5, pp: 15, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "burstFist",
+      hits: 4, randomTargets: true, maxDamage: 150,
+      description: "目にも止まらぬ拳を4回、ランダムな対象に打ち込む。"
+    },
+    heatHaze: {
+      id: "heatHaze", name: "陽炎の舞", kind: "dance", power: 0, pp: 12, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "heatHaze",
+      modifier: { duration: 3, message: "{target} の 姿が 揺らめいた!", popup: "回避率上昇",
+        effects: [ { type: "evasionBonus", value: 0.15 } ] },
+      description: "陽炎のように揺らめく舞で、味方全体の回避率を3ターンのあいだ上げる。"
+    },
+    // 焦熱のときは1回ずつ半分。探索中は使えない（でたらめに当たるのは戦闘の仕組みのため）
+    hustleDance: {
+      id: "hustleDance", name: "ハッスルダンス", kind: "dance", power: 0, pp: 18, accuracy: 1.0,
+      target: "allAllies", element: "none", effect: "hustleDance",
+      heal: { min: 55, max: 80 },
+      hits: 3, hitsMax: 6, randomTargets: true,
+      fieldUse: false,
+      description: "陽気に踊り、ランダムな味方を3〜6回回復する。"
+    },
+    cometSamba: {
+      id: "cometSamba", name: "彗星のサンバ", kind: "dance", power: 1, pp: 20, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "cometSamba",
+      damageFormula: { stat: "speed", factor: 0.15, defenseFactor: 0.1 }, powerText: "素早さ",
+      canCritical: false,
+      hits: 4, randomTargets: true, maxDamage: 150,
+      description: "彗星のような速さで踊り、4回、ランダムな対象を攻撃する。自分の素早さが高いほど強い。"
+    },
+    steadyBolero: {
+      id: "steadyBolero", name: "不動のボレロ", kind: "dance", power: 1, pp: 20, accuracy: 1.0,
+      target: "enemy", element: "none", effect: "steadyBolero",
+      damageFormula: { stat: "defense", factor: 0.15, defenseFactor: 0.1 }, powerText: "防御",
+      canCritical: false,
+      hits: 4, randomTargets: true, maxDamage: 150,
+      description: "どっしりと構えて踊り、4回、ランダムな対象を攻撃する。自分の防御が高いほど強い。"
     },
 
     // 主が頭の葉から薬草を取って、自分に使う（道具の薬草と同じ20回復）。

@@ -683,7 +683,8 @@
     var texts = (this.game.data.messages || {}).dungeon || {};
 
     if (boss) {
-      this._openPrompt(texts.bossPrompt, [
+      // 主ごとの問いかけ（v1.8.0。data/bosses.js の stairsPrompt。書いていなければ共通の bossPrompt）
+      this._openPrompt(boss.stairsPrompt || texts.bossPrompt, [
         { label: texts.choiceFight || "挑む", value: "go" },
         { label: texts.choiceReturn || "戻る", value: "home" },
         { label: texts.choiceStay || "やめる", value: "stay" }
@@ -737,6 +738,11 @@
       : (this.floor >= this.getFinalFloor() ? texts.exitAhead : null);
     if (ahead) {
       notice = notice ? (notice + "   " + ahead) : ahead;
+    }
+    // その階に降りたときの一言（v1.8.0。data/dungeons.js の floorNotes。滴る鍾乳洞 B4F の狼の階）
+    var floorNote = ((this.definition && this.definition.floorNotes) || {})[String(this.floor)];
+    if (floorNote) {
+      notice = notice ? (notice + "   " + floorNote) : floorNote;
     }
     this._showNotice(notice);
 
@@ -885,6 +891,8 @@
 
     // 敵のときだけ使う技（data/monsters.js の enemySkills）があれば入れ替える
     if (enemy.useEnemySkills) enemy.useEnemySkills();
+    // 主は性格の能力補正を掛けない（性格そのものはランダムのまま。v1.8.0 作者 2026-11-27）。下の倍率で HP を満タンにし直す前に決める
+    enemy.ignoreNatureStats = true;
     // 主としての補正。仲間にすると外れるので、基礎値を上げずに強くできる
     if (enemy.setEncounterMultipliers) enemy.setEncounterMultipliers(boss.statMultiplier);
     // 決まった順番で動く主は、ここで手順を渡す
@@ -897,6 +905,10 @@
     if (enemy.setBossStatusImmunity) {
       enemy.setBossStatusImmunity(this._bossImmunities(boss));
     }
+    // 主として出ているあいだだけの状態異常の耐性（v1.8.0。書いたものだけ種族の値の代わりになる）
+    if (enemy.setBossStatusResist) enemy.setBossStatusResist(boss.statusResist);
+    // 決まった順番を持たない主の、技を使う確率（v1.8.0 ハンザキ。書かなければ全体の既定）。仲間にすると外れる
+    if (typeof boss.skillRate === "number") enemy.skillRateOverride = boss.skillRate;
     // 弱体への耐性。主ごとの値（bosses.js の debuffResist）が無ければ全主共通の値（battle.js の bossDebuffResist）
     if (enemy.setDebuffResist) {
       enemy.setDebuffResist(typeof boss.debuffResist === "number"

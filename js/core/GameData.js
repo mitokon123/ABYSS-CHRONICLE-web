@@ -72,6 +72,7 @@
    */
   GameData.prototype._mergeSkillBooks = function () {
     var cfg = this.config.skillBooks || {};
+    var abilityCfg = this.config.abilityBooks || {};
     var monsters = this.monsters, dungeons = this.dungeons, items = this.items;
     var id, d;
     function strip(list) { return (list || []).filter(function (e) { return !e.fromBook; }); }
@@ -94,12 +95,14 @@
       if (!Object.prototype.hasOwnProperty.call(items, id)) continue;
       var book = items[id].book;
       if (!book) continue;
-      // 落とす種族は1つ（技の書）か、いくつか（特性の書。その特性を持つ種族みんな）
-      var droppers = Array.isArray(book.drop) ? book.drop : (book.drop ? [book.drop] : []);
+      // 落とす種族は1つ（技の書）か、その特性を持つ種族みんな（特性の書。v1.8.0。主も・シニガミとジュエルは除く）
+      var droppers = book.ability ? this._abilityHolders(book.ability)
+                   : (Array.isArray(book.drop) ? book.drop : (book.drop ? [book.drop] : []));
+      var rate = book.ability ? (abilityCfg.dropRate || 0) : (cfg.dropRate || 0);
       for (var k = 0; k < droppers.length; k++) {
         var speciesId = droppers[k];
         if (!monsters[speciesId]) continue;
-        var drop = { item: id, rate: cfg.dropRate || 0, afterEvent: cfg.afterEvent, fromBook: true };
+        var drop = { item: id, rate: rate, afterEvent: cfg.afterEvent, fromBook: true };
         monsters[speciesId].drops = (monsters[speciesId].drops || []).concat([drop]);
         // 区画で落とすものを置き換えている種族（ヌマボネなど）は、そちらにも足す（置き換えは丸ごとなので）
         for (d in dungeons) {
@@ -116,6 +119,21 @@
         ]);
       }
     }
+  };
+
+  /**
+   * その特性を持つ種族（v1.8.0。特性の書を落とす種族）。主も入る。
+   * config.abilityBooks.noDropSpecies（シニガミ・ジュエル）は入れない
+   */
+  GameData.prototype._abilityHolders = function (abilityId) {
+    var skip = (this.config.abilityBooks || {}).noDropSpecies || [];
+    var out = [];
+    for (var id in this.monsters) {
+      if (!Object.prototype.hasOwnProperty.call(this.monsters, id)) continue;
+      if (skip.indexOf(id) >= 0) continue;
+      if ((this.monsters[id].abilities || []).indexOf(abilityId) >= 0) out.push(id);
+    }
+    return out;
   };
 
   // --- アクセサ（存在しない id は null を返す） ---
@@ -159,6 +177,8 @@
    * ほかの種類の威力は足し算の値なので、そのまま（15 は "15"）。威力なしは "0"
    */
   GameData.prototype.formatSkillPower = function (skill) {
+    // 式で決まる技（彗星のサンバ・不動のボレロ。v1.8.0）は、威力の代わりに技の powerText（「素早さ」など）
+    if (skill && skill.powerText) return skill.powerText;
     var power = (skill && skill.power) || 0;
     // 倍率の技（斬撃・1体の体技。v1.4.1）は「1.0」のように小数で出す
     var rate = skill && (skill.kind === "slash" ||

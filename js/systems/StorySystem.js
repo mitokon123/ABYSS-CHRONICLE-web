@@ -59,6 +59,8 @@
    *   caught  : その種族を仲間にしたことがある（図鑑の「仲間にした」）
    *   seenAny : 並べた場面のどれかをもう見た
    *   notSeen : 並べた場面をどれもまだ見ていない
+   *   returned: そのダンジョンから一度でも拠点へ戻った（クリアしていなくても。v1.8.0。Game.hasReturnedFrom）
+   *   ready   : そのダンジョンがもう遊べる（data/dungeons.js に ready: false が無い。v1.8.0）
    * 2つ以上書いたら、全部を満たしたときだけ
    */
   StorySystem.prototype.isConditionMet = function (when, game) {
@@ -66,6 +68,11 @@
     if (!game) return false;
     if (when.cleared && !game.isDungeonCleared(when.cleared)) return false;
     if (when.event && !game.isEventDone(when.event)) return false;
+    if (when.returned && !(game.hasReturnedFrom && game.hasReturnedFrom(when.returned))) return false;
+    if (when.ready) {
+      var dg = ((game.data && game.data.dungeons) || {})[when.ready];
+      if (!dg || dg.ready === false) return false;
+    }
     if (when.result !== undefined) {
       if (asList(when.result).indexOf(game.getEventResult(when.event)) < 0) return false;
     }

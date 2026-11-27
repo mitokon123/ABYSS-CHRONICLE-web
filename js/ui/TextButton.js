@@ -60,4 +60,53 @@
   };
 
   NS.TextButton = TextButton;
+
+  /**
+   * 個数を決めるときの押せるボタン（v1.8.0。作者の指定 2026-11-27「スマホ版で工房でアイテムを作れない・作る量を増やせない、ショップも同じ」）。
+   * 「−10 −1 +1 +10」と「決定」を1列に並べる。キー（←→↑↓・決定）はこれまでどおり使える。
+   * お店（ShopScene）と工房（CraftScene）の個数の窓の下に置く。
+   *
+   * @param {MyGame.Panel} panel
+   * @param {object} area 並べる枠 { x, y, w, h }（右の説明欄の下の方）
+   * @param {number} step まとめて動く数（layout.quantityStep）
+   * @param {string} okLabel 「決定」の文字
+   */
+  function QuantityButtons(panel, area, step, okLabel) {
+    this.panel = panel;
+    var gap = 6, okW = Math.max(72, Math.floor(area.w * 0.28));
+    var stepW = Math.floor((area.w - okW - gap * 4) / 4);
+    var x = area.x;
+    var deltas = [-step, -1, 1, step];
+    this.buttons = [];
+    for (var i = 0; i < deltas.length; i++) {
+      var d = deltas[i];
+      var label = (d > 0 ? "+" : "−") + Math.abs(d);
+      this.buttons.push({ delta: d, button: new TextButton(panel, { x: x, y: area.y, w: stepW, h: area.h }, label) });
+      x += stepW + gap;
+    }
+    this.ok = new TextButton(panel, { x: area.x + area.w - okW, y: area.y, w: okW, h: area.h }, okLabel || "決定");
+  }
+
+  /** @returns {{delta:number}|{confirm:true}|null} 押されたボタン */
+  QuantityButtons.prototype.handleInput = function (input) {
+    var hit = null;
+    for (var i = 0; i < this.buttons.length; i++) {
+      if (this.buttons[i].button.handleInput(input) && !hit) hit = { delta: this.buttons[i].delta };
+    }
+    if (this.ok.handleInput(input) && !hit) hit = { confirm: true };
+    return hit;
+  };
+
+  QuantityButtons.prototype.render = function () {
+    for (var i = 0; i < this.buttons.length; i++) this.buttons[i].button.render();
+    this.ok.render();
+  };
+
+  /** 右の説明欄（layout.detail）の下の端に並べる枠 */
+  QuantityButtons.areaFor = function (layout) {
+    var d = (layout && layout.detail) || { x: 392, y: 122, w: 368, h: 372 };
+    return { x: d.x + 12, y: d.y + d.h - 46, w: d.w - 24, h: 34 };
+  };
+
+  NS.QuantityButtons = QuantityButtons;
 })(window.MyGame);

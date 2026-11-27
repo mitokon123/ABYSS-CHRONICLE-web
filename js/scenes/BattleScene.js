@@ -770,6 +770,18 @@
         return;
       }
 
+      // 当たる瞬間が遅い演出（data/effects.js の hitAt。インフェルノの火柱など）は、先に演出だけ始めて、
+      // 文・数字・HPバー・揺れ・音は当たる瞬間まで待つ（v1.8.0 作者の指定「数字は当たる瞬間まで待つ」）。
+      // 待っているあいだに決定キーを押せば、待たずにすぐ出す（上の quick で playbackTimer が 0 になる）
+      if (!event._effectStarted) {
+        var lead = this._startEffectAhead(this.playbackIndex);
+        if (lead > 0) {
+          this.playbackTimer = lead;
+          this.playbackHold = false;
+          return;
+        }
+      }
+
       this._playEvent(event, quick);
       this.playbackIndex++;
 
@@ -843,6 +855,8 @@
     // PPも同じ。技を使った（払った）瞬間と、PPを戻す道具を使った瞬間
     if (event.type === "useSkill" && event.actor) this._revealPp(event.actor, event.ppAfter);
     if (event.ppTarget) this._revealPp(event.ppTarget, event.ppValue);
+    // 分け与え（v1.8.0）は渡した側の PP も減る
+    if (event.ppSource) this._revealPp(event.ppSource, event.ppSourceValue);
     // 状態異常の印も、この瞬間に増やす・消す（_shownStatusesFor）
     if (event.type === "status" || event.type === "statusEnd" || event.statusIds) {
       this._revealStatusMark(event);
@@ -855,7 +869,10 @@
     }
 
     this._playActionMotion(event);
-    this._playSkillEffect(event);
+    // 当たる瞬間を待つ演出は、もう始めてある（_startEffectAhead）
+    if (!event._effectStarted) this._playSkillEffect(event);
+    // はね返した瞬間（反射。v1.8.0）。返した側の前で板がはじけ、矢じりが撃った側へ飛ぶ
+    if (event.type === "reflect") this._playReflectBounce(event);
 
     switch (event.type) {
       case "damage":
@@ -936,6 +953,25 @@
         this._playStatusSe(event.statusId);
         wait = Math.max(wait, this.animator.drainTime(event.amount));
         break;
+      // 裂傷（v1.8.0）。毒と同じ見せ方
+      case "slipDamage":
+        this.animator.revealTo(event.target, event.currentHp);
+        this._applyStyle("statusDamage", event.target, String(event.amount));
+        this.game.audio.playSe("hit");
+        wait = Math.max(wait, this.animator.drainTime(event.amount));
+        break;
+      // 弱体が消えた（リフレッシュ。v1.8.0）。消えた弱体の印をまとめて外す
+      case "cleanse":
+        for (var cn = 0; cn < (event.names || []).length; cn++) {
+          this._hideModifier({ target: event.target, skillName: event.names[cn] });
+        }
+        if (event.se) this.game.audio.playSe(event.se);
+        break;
+      // かばう・分け与え（v1.8.0）。音だけ
+      case "guard":
+      case "ppShare":
+        if (event.se) this.game.audio.playSe(event.se);
+        break;
       // 効果は takeTurn の時点でもう掛かっているが、
       // 印は「その出来事を見せた瞬間」に出す（HPバーと同じ考え方）
       case "modifier":
@@ -964,6 +1000,10 @@
         }
         // 絆に届いた瞬間は、その仲間からハートをいくつか出す（v1.4.4・作者の指定）
         if (event.bond) this._bondHearts(event.actor);
+        // 初めて絆に届いたときの説明（v1.8.0）
+        if (event.bond && this.game.tutorial) {
+          this.tutorial.show(this.game.tutorial.take("bondReached"));
+        }
         break;
       // 初めてレベルが上がったときの説明。
       // ここで出すと、レベルアップの演出が出ている画面のまま読める。
@@ -1007,7 +1047,9 @@
         // HPの回復（技・道具・吸血）。音が付いている出来事（道具）は上で鳴らしたので重ねない
         if (event.healAmount) {
           this._applyStyle("heal", event.revealTarget, "+" + event.healAmount);
-          if (!event.se) this.game.audio.playSe("heal");
+          // 起こす技に音があれば（se_revive。v1.8.0）、起きたときの回復の音は重ねない
+          var reviveSkill = (event.type === "revive" && event.skillId) ? this.game.data.getSkill(event.skillId) : null;
+          if (!event.se && !(reviveSkill && reviveSkill.se)) this.game.audio.playSe("heal");
           wait = Math.max(wait, this.animator.drainTime(event.healAmount));
         }
         break;
@@ -1069,9 +1111,11 @@
       if (event.popup) {
         text = event.popup;
       } else {
-        var names = this._popupStatNames(event.effects || []).split("・");
-        for (var n = 0; n < names.length; n++) {
-          this._addEffectPopup(fill(event.raised ? t.popupStatUp : t.popupStatDown, { stat: names[n] }),
+        // ×2.0 以上の強化は「〇〇大幅上昇」（v1.8.0・作者の指定）
+        var items = this._popupStatItems(event.effects || []);
+        for (var n = 0; n < items.length; n++) {
+          var format = !event.raised ? t.popupStatDown : (items[n].huge && t.popupStatBigUp) || t.popupStatUp;
+          this._addEffectPopup(fill(format, { stat: items[n].name }),
             this._popupOwnerName(event), kind, n, event);
         }
         return;
@@ -1079,10 +1123,19 @@
     } else if (event.type === "dispel") {
       // 強化が消えた（波さらい。v1.8.0）。消すものが無かったときは出さない
       if ((event.names || []).length > 0) { text = t.popupDispel; kind = "debuff"; }
-    } else if (event.type === "ability" || event.type === "undying" || event.type === "partyFirstStrike" ||
-               event.type === "tailwind" || event.type === "wardGiven" || event.type === "abilityPopup" ||
+    } else if (event.type === "cleanse") {
+      // 弱体が消えた（リフレッシュ。v1.8.0）
+      if ((event.names || []).length > 0) { text = t.popupCleanse; kind = "buff"; }
+    } else if (event.type === "guard") {
+      // かばう（v1.8.0）。札の持ち主はかばう本人
+      text = t.popupGuard; kind = "buff";
+    } else if (event.type === "reflect") {
+      // はね返した（反射。v1.8.0）。札の持ち主は返した側
+      text = t.popupReflect; kind = "buff";
+    } else if (event.type === "ability" || event.type === "undying" || event.type === "endure" || event.type === "partyFirstStrike" ||
+               event.type === "tailwind" || event.type === "wardGiven" || event.type === "abilityPopup" || event.type === "growStat" ||
                ((event.type === "regen" || event.type === "drain" || event.type === "ppRegen") && event.abilityName)) {
-      text = event.abilityName;
+      text = this._popupAbilityText(event);
       kind = event.sourceKind || "ability";
     }
     if (!text) return;
@@ -1091,6 +1144,18 @@
       ? (event.side === "enemy" ? t.popupEnemyAll : t.popupPartyAll)
       : this._popupOwnerName(event);
     this._addEffectPopup(text, owner, kind, 0, event);
+  };
+
+  /**
+   * 特性・装備・加護の札の言葉。「名前：働き」（「再生：HP自動回復」。v1.8.0・作者が案Cを選んだ）。
+   * 働きの分からない出来事（event.work が無い・popupWork に無い）は名前だけ
+   */
+  BattleScene.prototype._popupAbilityText = function (event) {
+    var t = this.texts;
+    var name = event.abilityName;
+    if (!name) return null;
+    var work = event.work && (t.popupWork || {})[event.work];
+    return (work && t.popupWorkFormat) ? fill(t.popupWorkFormat, { name: name, work: work }) : name;
   };
 
   /**
@@ -1159,16 +1224,29 @@
    * 能力の倍率・加算と命中を拾い、受ける／与えるダメージだけの効果は「能力」とする
    */
   BattleScene.prototype._popupStatNames = function (effects) {
+    return this._popupStatItems(effects).map(function (it) { return it.name; }).join("・");
+  };
+
+  /**
+   * 強化・弱体で変わる能力ごとの札の材料。[{ name: "攻撃力", huge: ×2.0 以上の倍率か }]。
+   * 能力の倍率・加算と命中を拾い、受ける／与えるダメージだけの効果は「能力」1つにする
+   */
+  BattleScene.prototype._popupStatItems = function (effects) {
     var labels = this.texts.popupStats || {};
-    var names = [];
+    var items = [];
     for (var i = 0; i < effects.length; i++) {
       var e = effects[i];
       var key = (e.type === "statMultiplier" || e.type === "statBonus") ? e.stat
               : (e.type === "accuracyMultiplier") ? "accuracy" : null;
       var name = key ? labels[key] : null;
-      if (name && names.indexOf(name) < 0) names.push(name);
+      if (!name) continue;
+      var huge = e.type === "statMultiplier" && e.value >= 2;
+      var have = null;
+      for (var k = 0; k < items.length; k++) if (items[k].name === name) have = items[k];
+      if (have) have.huge = have.huge || huge;
+      else items.push({ name: name, huge: huge });
     }
-    return names.length > 0 ? names.join("・") : (labels.other || "");
+    return items.length > 0 ? items : [{ name: labels.other || "", huge: false }];
   };
 
   /** 札に出す持ち主の名前。敵なら「敵の」を付ける（文と同じ見分け方） */
@@ -1215,6 +1293,11 @@
     }
     // 並び：同じ高さで横に並べ、幅の overlap ぶん前の札に重ねる。全体を真ん中に寄せるので、増えるほど左へずれる
     var step = P.w * (1 - (P.overlap === undefined ? 1 / 3 : P.overlap));
+    // 札の幅を広げた（v1.8.0 で 270 → 360）ので、3枚では画面を越える。越えるぶんだけ重ねを深くする
+    if (shown.length > 1) {
+      var room = canvasWidth - 2 * (P.margin || 0) - P.w;
+      step = Math.min(step, room / (shown.length - 1));
+    }
     var groupW = P.w + Math.max(0, shown.length - 1) * step;
     var startX = (canvasWidth - groupW) / 2;
 
@@ -1274,17 +1357,8 @@
   };
 
   /**
-   * 当たったときの音のid。無ければ null（鳴らさない）。
-   *
-   * 出した瞬間の音（skill.se）を持つ技は、当たったときの打撃音を重ねない。
-   * ファイアの炎の音のあとに「ドン」と殴る音が来るのは変なので、技の音だけで完結させる。
-   * それ以外（通常攻撃・体当たり・噛みつく など）は演出の型（data/effects.js の shapes）の
-   * hitSe、無ければ hit（打撃）。通常攻撃は種族の attackEffect で型が決まるので、斬る種族は斬撃音になる。
-   * 技に hitSe を書けば、この判断を上書きできる（"hit" で鳴らす、null で止める）。
-   */
-  /**
    * 強化・弱体が掛かった瞬間の音。ふつうは buff / debuff。
-   * 技に modifierSe を書けば上書きできる（null で鳴らさない。〇〇ベールは技の音だけにする）
+   * 技に modifierSe を書けば上書きできる（null で鳴らさない。エレメントバリアは技の音だけにする）
    */
   BattleScene.prototype._playModifierSe = function (event) {
     var skill = event.skillId ? this.game.data.getSkill(event.skillId) : null;
@@ -1295,6 +1369,15 @@
     this.game.audio.playSe(event.raised ? "buff" : "debuff");
   };
 
+  /**
+   * 当たったときの音のid。無ければ null（鳴らさない）。
+   *
+   * 出した瞬間の音（skill.se）を持つ技は、当たったときの打撃音を重ねない。
+   * ファイアの炎の音のあとに「ドン」と殴る音が来るのは変なので、技の音だけで完結させる。
+   * それ以外（通常攻撃・体当たり・噛みつく など）は演出の型（data/effects.js の shapes）の
+   * hitSe、無ければ hit（打撃）。通常攻撃は種族の attackEffect で型が決まるので、斬る種族は斬撃音になる。
+   * 技に hitSe を書けば、この判断を上書きできる（"hit" で鳴らす、null で止める）。
+   */
   BattleScene.prototype._hitSeFor = function () {
     var skill = this._currentSkill;
     if (!skill) return "hit";
@@ -1588,6 +1671,7 @@
    * 形は技の effect、色は技の属性から決まる。
    * effect を書いていない技は、何も出ない。
    */
+  /** @returns {boolean} 演出を出したか（_startEffectAhead が使う） */
   BattleScene.prototype._playSkillEffect = function (event) {
     // 技を出した時点で覚えておき、当たった出来事で使う
     if (event.type === "useSkill") {
@@ -1598,40 +1682,66 @@
       // 同じ名前で値を入れるとメソッドを潰してしまう（実際に一度やって戦闘が壊れた）
       this._currentSkillActor = event.actor || null;
       this._centerEffectDone = false;
-      return;
+      return false;
     }
 
-    if (!this._currentSkill) return;
+    if (!this._currentSkill) return false;
 
     // 範囲の中心に1回だけ出す技（data/skills.js の effectAt: "center"。どくのいき）
     if (this._currentSkill.effectAt === "center") {
-      this._playCenterEffect(event);
-      return;
+      return this._playCenterEffect(event);
     }
 
     // ダメージの無い状態異常の技（青い眼光など）は damage が来ないので、状態異常の出来事も合図にする
     // 治した出来事は、いまの技で治したときだけ（特性「脱皮」で治ったときに、前の技の演出を出さない）
-    if (event.type === "cure" && event.skillId !== this._currentSkill.id) return;
+    if (event.type === "cure" && event.skillId !== this._currentSkill.id) return false;
     // 回復の技（キュア・やくそう）は、回復した仲間ごとに演出を出す。道具の回復（skillId が無い）では出さない（v1.3.0）
     // 起こす技（リザレクト）は、起きたときだけ出す
     var healed = ((event.type === "heal" || event.type === "revive") && event.skillId === this._currentSkill.id);
     var statusOnly = isStatusResultEvent(event.type) && !NS.BattleSystem.dealsDamage(this._currentSkill);
-    if ((!isHitEvent(event.type) && !statusOnly && !healed) || !event.target) return;
+    if ((!isHitEvent(event.type) && !statusOnly && !healed) || !event.target) return false;
     // 威力も持つ弱体の技（ロックスパイク）は、当たった時点でもう演出を出している。弱体で2回目は出さない
-    if ((event.type === "modifier" || event.type === "modifierMiss") && NS.BattleSystem.dealsDamage(this._currentSkill)) return;
+    if ((event.type === "modifier" || event.type === "modifierMiss") && NS.BattleSystem.dealsDamage(this._currentSkill)) return false;
     // 反動は自分が受けるもの。技の演出は出さない
-    if (event.type === "recoil") return;
+    if (event.type === "recoil") return false;
 
     var effectId = this._effectIdFor(this._currentSkill, this._currentSkillActor);
-    if (!effectId) return;
+    if (!effectId) return false;
 
     var pos = this._monsterCenter(event.target);
-    if (!pos) return;
+    if (!pos) return false;
 
     this.skillEffects.play(effectId, this.game.clock, pos.x, pos.y,
       this._skillEffectColor(this._currentSkill, effectId),
       // 強化は下から上へ、弱体は上から下へ流す
       this._effectDirection(this._currentSkill, event));
+    return true;
+  };
+
+  /**
+   * 当たる瞬間が遅い演出（data/effects.js の hitAt）を、出来事を見せる前に始める（v1.8.0）。
+   * その出来事（同時に見せる組なら組の全員）で演出が始まったら、当たる瞬間までの時間（ms）を返す。
+   * 始めた出来事には _effectStarted を付け、_playEvent で2回目を出さない。
+   * hitAt を書いていない演出は何もしないで 0 を返す（今までどおり、演出と数字が同時に出る）
+   */
+  BattleScene.prototype._startEffectAhead = function (index) {
+    var events = this.playbackEvents || [];
+    var event = events[index];
+    var skill = this._currentSkill;
+    if (!event || !skill || event.type === "useSkill" || !event.target) return 0;
+    var effectId = this._effectIdFor(skill, this._currentSkillActor);
+    var shapes = (this.game.data.effects && this.game.data.effects.shapes) || {};
+    var shape = effectId ? shapes[effectId] : null;
+    if (!shape || !shape.hitAt || !shape.duration) return 0;
+
+    var group = [event];
+    for (var i = index + 1; event.simul && i < events.length && events[i].simul === event.simul; i++) group.push(events[i]);
+    var started = false;
+    for (var g = 0; g < group.length; g++) {
+      if (this._playSkillEffect(group[g])) started = true;
+      group[g]._effectStarted = true;
+    }
+    return started ? shape.hitAt * shape.duration : 0;
   };
 
   /**
@@ -1660,6 +1770,15 @@
     this.skillEffects.play(kind.casterEffect, this.game.clock, pos.x, pos.y, color, 1);
   };
 
+  /** はね返した瞬間の演出（反射。v1.8.0）。共鳴を返したら水色、攻撃を返したら橙。矢じりは撃った側の向きへ */
+  BattleScene.prototype._playReflectBounce = function (event) {
+    var pos = event.target ? this._monsterCenter(event.target) : null;
+    if (!pos) return;
+    var color = (event.against === "physical") ? "#ff8a4a" : "#9fe6ff";
+    // 敵が返したら下（味方）へ、味方が返したら上（敵）へ
+    this.skillEffects.play("reflectBounce", this.game.clock, pos.x, pos.y, color, event.targetSide === "enemy" ? -1 : 1);
+  };
+
   /**
    * 並び全体の中心に、演出を1回だけ出す（effectAt: "center"）。
    *
@@ -1668,19 +1787,22 @@
    * ダメージの無い技（どくのいき）は damage が来ないので、状態異常の出来事も合図にする。
    */
   BattleScene.prototype._playCenterEffect = function (event) {
-    if (this._centerEffectDone || !event.target) return;
-    if (!isHitEvent(event.type) && !isStatusResultEvent(event.type)) return;
+    if (this._centerEffectDone || !event.target) return false;
+    // はね返されて撃った側に当たった出来事（反射。v1.8.0）は合図にしない（撃った側の列に出てしまうため）
+    if (event.reflected) return false;
+    if (!isHitEvent(event.type) && !isStatusResultEvent(event.type)) return false;
 
     var effectId = this._effectIdFor(this._currentSkill, this._currentSkillActor);
-    if (!effectId) return;
+    if (!effectId) return false;
 
     var pos = this._rowMiddle(event.target);
-    if (!pos) return;
+    if (!pos) return false;
 
     this._centerEffectDone = true;
     this.skillEffects.play(effectId, this.game.clock, pos.x, pos.y,
       this._skillEffectColor(this._currentSkill, effectId), 1,
       this._skillTargetPoints());
+    return true;
   };
 
   /**
@@ -2529,6 +2651,13 @@
       return;
     }
 
+    // 自分を選べない技（かばう・分け与え。notSelf。v1.8.0）は、場にほかの仲間がいないと選べない
+    var chooser = this._currentActor();
+    if (skill && skill.notSelf && !this.system.getFieldAllies().some(function (m) { return m !== chooser; })) {
+      this._flashMessage(this.texts.noOtherAlly);
+      return;
+    }
+
     // 自分にかける技と範囲全体の技（相手全体・味方全体）は相手を選ばない。そのまま確定する
     if (skill && (skill.target === "self" || skill.target === "allEnemies" || skill.target === "allAllies")) {
       this._commitAction({ type: "skill", skillId: selected.value });
@@ -2675,6 +2804,9 @@
     }
     // 倒れた仲間を起こす技（リザレクト）も同じ
     if (this._pendingRevivesSkill()) return monster.isFainted() && !monster._undying;
+    // 自分を選べない技（かばう・分け与え。v1.8.0）
+    if (this.pending && this.pending.type === "skill" && monster === this._currentActor() &&
+        (this.game.data.getSkill(this.pending.skillId) || {}).notSelf) return false;
     return !monster.isFainted();
   };
 

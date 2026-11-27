@@ -55,6 +55,8 @@
     this.shop = new NS.ShopSystem(game.data, game);
 
     this.confirmMenu = new NS.CommandMenu(this.panel, this.layout.confirmMenu);
+    // 個数の窓の下の押せるボタン（v1.8.0。スマホ・マウスで個数を変えて決める）
+    this.quantityButtons = new NS.QuantityButtons(this.panel, NS.QuantityButtons.areaFor(this.layout), this.layout.quantityStep || 10, this.texts.quantityOk);
     // 右の説明欄（v1.4.0）。中身は _detailContent が作る
     this.pane = new NS.DetailPane(this.panel, this.sprites, this.layout.detail || { x: 0, y: 0, w: 0, h: 0 });
     this._detailKey = null;
@@ -342,6 +344,8 @@
           !NS.DungeonCatalog.isConditionMet(blessing.unlockedBy, this.game.clearedDungeons, this.game.data)) {
         continue;
       }
+      // 出来事を済ませると並ぶ加護（v1.8.0：予選を勝ち抜いた印 chronicleQualifier。写本堂と同じ）
+      if (blessing.afterEvent && !(this.game.isEventDone && this.game.isEventDone(blessing.afterEvent))) continue;
 
       var owned = this.game.hasBoughtBlessing(id);
       var affordable = this.game.canAfford(blessing.price || 0);
@@ -555,6 +559,11 @@
    */
   ShopScene.prototype._updateQuantity = function (input) {
     var step = this.layout.quantityStep || 10;
+
+    // 押せるボタン（−10 −1 +1 +10・決定）
+    var tapped = this.quantityButtons.handleInput(input);
+    if (tapped && tapped.delta && this.order && this.order.mode !== "blessing") { this._changeCount(tapped.delta); return; }
+    if (tapped && tapped.confirm) { this._beginConfirm(); return; }
 
     if (input.isPressed("right")) this._changeCount(1);
     if (input.isPressed("left")) this._changeCount(-1);
@@ -895,8 +904,11 @@
       origin.x, y, { font: t.smallFont, color: t.subTextColor });
     y += lh + 10;
 
-    // はい／いいえ
-    if (this.phase !== "confirm") return;
+    // はい／いいえ。個数を決めているあいだは、押せるボタンを出す
+    if (this.phase !== "confirm") {
+      if (this.phase === "quantity" && this.order.mode !== "blessing") this.quantityButtons.render();
+      return;
+    }
 
     this.panel.drawText(
       buyingBlessing

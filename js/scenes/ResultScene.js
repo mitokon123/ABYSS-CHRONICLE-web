@@ -53,6 +53,9 @@
 
     this.list.setRows(this._buildRows());
     if (this.pane) this.pane.setContent(this._sideContent(), "result");
+
+    // そのダンジョンから戻った印（v1.8.0。物語の when.returned。場面20「鍾乳洞から戻ったとき」）
+    if (this.summary.dungeon && game.markDungeonReturned) game.markDungeonReturned(this.summary.dungeon.id);
   }
 
   ResultScene.prototype.enter = function () {};

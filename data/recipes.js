@@ -23,6 +23,94 @@
       materials: [ { item: "herb", count: 2 } ]
     },
 
+    /**
+     * --- 回復薬のほかの道具（v1.8.0。作者の表 宝箱と工房の道具_案.md 2026-11-27） ---
+     * 作者の指定「工房でポーション（回復薬）以外の道具を作成できるように」。私の案を作者が直した
+     * （精気の実と解毒草は作れない・状態異常の薬は解毒草から・帰還の石は鉱石3つ）。
+     * 1回で1個・ゴールドは要らない・作る回数は素材のあるだけ選べる（作者「一度に作れる数、いくらでも」）。
+     * 並ぶのは、素材の採れる区画のひとつ前のクリア（装備と同じ）。状態異常の薬は腐食の毒沼のクリアから（作者）。
+     * どれも、材料を店で買って作って売ると損になる（check.html で見張る）
+     */
+    elixir: {
+      id: "elixir",
+      order: 1.1,
+      result: { item: "elixir", count: 1 },
+      materials: [ { item: "potion", count: 2 }, { item: "abyssFragment", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    ancientHoney: {
+      id: "ancientHoney",
+      order: 1.2,
+      result: { item: "ancientHoney", count: 1 },
+      materials: [ { item: "ancientSap", count: 2 }, { item: "elixir", count: 1 } ],
+      unlockedBy: "ivyCorridor"
+    },
+    greatSpiritBerry: {
+      id: "greatSpiritBerry",
+      order: 1.3,
+      result: { item: "greatSpiritBerry", count: 1 },
+      materials: [ { item: "spiritBerry", count: 2 }, { item: "sproutSeed", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    numbLeaf: {
+      id: "numbLeaf",
+      order: 1.4,
+      result: { item: "numbLeaf", count: 1 },
+      materials: [ { item: "twistedVine", count: 1 }, { item: "antidote", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    voiceTonic: {
+      id: "voiceTonic",
+      order: 1.5,
+      result: { item: "voiceTonic", count: 1 },
+      materials: [ { item: "duskDew", count: 1 }, { item: "antidote", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    purifyingSalt: {
+      id: "purifyingSalt",
+      order: 1.6,
+      result: { item: "purifyingSalt", count: 1 },
+      materials: [ { item: "rustedBone", count: 1 }, { item: "antidote", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    wakeFlower: {
+      id: "wakeFlower",
+      order: 1.7,
+      result: { item: "wakeFlower", count: 1 },
+      materials: [ { item: "sleepPollen", count: 1 }, { item: "antidote", count: 1 } ],
+      unlockedBy: "venomMarsh"
+    },
+    clearEyeDew: {
+      id: "clearEyeDew",
+      order: 1.8,
+      result: { item: "clearEyeDew", count: 1 },
+      materials: [ { item: "glowMoss", count: 1 }, { item: "antidote", count: 1 } ],
+      unlockedBy: "sproutHollow"
+    },
+    panacea: {
+      id: "panacea",
+      order: 1.9,
+      result: { item: "panacea", count: 1 },
+      materials: [
+        { item: "antidote", count: 1 }, { item: "numbLeaf", count: 1 }, { item: "wakeFlower", count: 1 },
+        { item: "voiceTonic", count: 1 }, { item: "purifyingSalt", count: 1 }, { item: "clearEyeDew", count: 1 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    returnStone: {
+      id: "returnStone",
+      order: 1.91,
+      result: { item: "returnStone", count: 1 },
+      materials: [ { item: "oreShard", count: 3 } ]
+    },
+    scoutIncense: {
+      id: "scoutIncense",
+      order: 1.92,
+      result: { item: "scoutIncense", count: 1 },
+      materials: [ { item: "glowDust", count: 1 }, { item: "emberAsh", count: 1 } ],
+      unlockedBy: "mossyMine"
+    },
+
     stoneBand: {
       id: "stoneBand",
       order: 2,
@@ -761,6 +849,79 @@
         { item: "brassGear", count: 3 }
       ],
       unlockedBy: "ivyCorridor"
+    },
+
+    // --- 千年樹の根底クリア（滴る鍾乳洞の素材。v1.8.0 作者の表 2026-11-27。工房に並ぶのは前の区画のクリア） ---
+    flowingBlade: {
+      id: "flowingBlade",
+      order: 59,
+      result: { item: "flowingBlade", count: 1 },
+      materials: [
+        { item: "blueWolfClaw", count: 3 },
+        { item: "dropFeather", count: 2 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    stalagmiteMaul: {
+      id: "stalagmiteMaul",
+      order: 60,
+      result: { item: "stalagmiteMaul", count: 1 },
+      materials: [
+        { item: "stalagmiteShard", count: 4 },
+        { item: "brassGear", count: 2 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    snailShellArmor: {
+      id: "snailShellArmor",
+      order: 61,
+      result: { item: "snailShellArmor", count: 1 },
+      materials: [
+        { item: "snailShell", count: 4 },
+        { item: "stalagmiteShard", count: 1 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    dropFeatherCloak: {
+      id: "dropFeatherCloak",
+      order: 62,
+      result: { item: "dropFeatherCloak", count: 1 },
+      materials: [
+        { item: "dropFeather", count: 4 },
+        { item: "ancientSap", count: 1 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    echoEarring: {
+      id: "echoEarring",
+      order: 63,
+      result: { item: "echoEarring", count: 1 },
+      materials: [
+        { item: "echoPearl", count: 1 },
+        { item: "snailShell", count: 2 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    dropWard: {
+      id: "dropWard",
+      order: 64,
+      result: { item: "dropWard", count: 1 },
+      materials: [
+        { item: "dropFeather", count: 1 },
+        { item: "snailShell", count: 1 }
+      ],
+      unlockedBy: "ancientRoots"
+    },
+    hanzakiHideCoat: {
+      id: "hanzakiHideCoat",
+      order: 65,
+      result: { item: "hanzakiHideCoat", count: 1 },
+      materials: [
+        { item: "hanzakiHide", count: 1 },
+        { item: "snailShell", count: 3 },
+        { item: "slimeShard", count: 4 }
+      ],
+      unlockedBy: "ancientRoots"
     }
   };
 })(window.MyGame);

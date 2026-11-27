@@ -17,6 +17,7 @@
  *   minFloor / maxFloor : その階にだけ出す
  *   minLevel / maxLevel : その種族だけレベル範囲を変える
  *   solo           : true なら、引かれたときにその1体だけの戦いになる
+ *   maxPerGroup    : 1回の戦闘に出る数の上限（v1.8.0）。上限に届いたら、残りはほかの種族から引く。いまはどの種族も使っていない
  *   statMultiplier : その戦いのあいだだけ掛かる倍率（主と同じ仕組み。仲間にすると外れる）
  */
 (function (NS) {
@@ -115,7 +116,14 @@
     // 実体を作る前に決めるのは、solo を見つけたときに引き直さずに済ませるため
     var picked = [];
     for (var i = 0; i < count; i++) {
-      var entry = pickByWeight(allowed, this.random);
+      // maxPerGroup に届いた種族は、残りの抽選から外す（v1.8.0）
+      var pool = allowed.filter(function (cand) {
+        if (!cand.maxPerGroup) return true;
+        var n = 0;
+        for (var c = 0; c < picked.length; c++) if (picked[c] === cand) n++;
+        return n < cand.maxPerGroup;
+      });
+      var entry = pickByWeight(pool, this.random);
       if (entry) picked.push(entry);
     }
     if (picked.length === 0) return null;

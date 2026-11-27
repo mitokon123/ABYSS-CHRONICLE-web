@@ -3034,4 +3034,314 @@
       ]
     }
   });
+
+  // --- 涵養の穴・滴る鍾乳洞の素材と装備（v1.8.0。私が描いた 2026-11-26） ---
+  NS.extend("sprites", {
+    // 巻貝の殻：ミズマイマイの、鍾乳石のような塔の殻
+    iconItemSnailShell: {
+      palette: { ".": null, "K": "#14202c", "S": "#dbe6ea", "s": "#a9bdc9", "D": "#4c6478", "H": "#f6fbfd", "R": "#7f96a8" },
+      pixels: [
+        ".......KK.......",
+        "......KssK......",
+        ".....KSSssK.....",
+        ".....KSSssK.....",
+        "....KssRRRsK....",
+        "....KRRHHHsK....",
+        "...KsHHSSssRK...",
+        "...KSSssRRRHK...",
+        "..KssRRRHHHssK..",
+        "..KRRHHHSssRRK..",
+        ".KsHHSssRRRHHsK.",
+        ".KSssRRRHHHSssK.",
+        ".KsRRHHDDDSSssK.",
+        "..KHHSDDDDDssK..",
+        "...KKKSSssKKK...",
+        "......KKKK......"
+      ]
+    },
+
+    // 響きの真珠：殻の奥で水の音を響かせていた真珠
+    iconItemEchoPearl: {
+      palette: { ".": null, "K": "#1a2238", "C": "#d4e2f4", "H": "#f4f8ff", "D": "#94a8cc", "W": "#ffffff", "Q": "#6ac8e8" },
+      pixels: [
+        "................",
+        ".......KK.......",
+        ".....KKHHKK.....",
+        "....KHHHHHHK....",
+        "...KHHHCCHHHK...",
+        ".QKHHWWCCCCHHKQ.",
+        "..KHHWCCCCCDHK..",
+        "Q.KHHCCCCCCDDK.Q",
+        "..KHHCCCCCCDDK..",
+        ".QKHHCCCCCCDDKQ.",
+        "...KHHDCCDDDK...",
+        "....KHHDDDDK....",
+        ".....KKHHKK.....",
+        ".......KK.......",
+        "....QQQQQQQQ....",
+        "................"
+      ]
+    },
+
+    // 雫の羽：先から雫の落ちる青い羽
+    iconItemDropFeather: {
+      palette: { ".": null, "K": "#0c1626", "H": "#9fd4f8", "A": "#3f8fd8", "D": "#2a64a8", "S": "#e8f6ff", "Q": "#ccf2ff", "q": "#5ac0f0" },
+      pixels: [
+        "...........KKK..",
+        ".........KKADSK.",
+        ".......KKAADSHK.",
+        "......KADADSHHK.",
+        ".....KADKDSSHHK.",
+        "....KAAADSSHHK..",
+        "....KAADSSHHHK..",
+        "...KADDSSHKHK...",
+        "...KDKSSHHHHK...",
+        "...KDSSHHHHK....",
+        "...KSSHHHKK.....",
+        "...KSHHKK...KQK.",
+        "....KKK....KQqK.",
+        "...S.......KqqK.",
+        "..S.........KK..",
+        ".K.............."
+      ]
+    },
+
+    // 石筍のかけら：先が濡れた石筍の折れたもの
+    iconItemStalagmiteShard: {
+      palette: { ".": null, "K": "#2a2018", "S": "#d9c8a4", "s": "#a8926a", "H": "#f2e8cc", "L": "#b8a070", "Q": "#7fd0ff" },
+      pixels: [
+        ".......Q........",
+        "......KHK.......",
+        "......KHK.......",
+        ".....KHssKQ.....",
+        ".....KHssK......",
+        "....KHSSssK.....",
+        "....KLLLLLK.....",
+        "....KHSSSssK....",
+        "....KHSSSssK....",
+        "...KHSSSSSssK...",
+        "...KLLLLLLLLK...",
+        "...KHSSSSSssK...",
+        "..KHSSSSSSssK...",
+        "..KHKSKSKSKsK...",
+        "...K.K.K.K.K....",
+        "................"
+      ]
+    },
+
+    // 蒼狼の爪：ウルヴァーグの鉤爪
+    iconItemBlueWolfClaw: {
+      palette: { ".": null, "K": "#0c121c", "F": "#6a83a0", "f": "#4a6080", "h": "#9cb4cc", "W": "#eef6ff", "w": "#a6c4e0", "Q": "#8fdcff" },
+      pixels: [
+        "...KKK..........",
+        "..KhhhK.........",
+        ".KhFFFhK........",
+        "KhFFFFFwKK......",
+        "KhFFFWWWwwK.....",
+        ".KhFwwwWWwwK....",
+        "..KhwwwwwWwwK...",
+        "...KKKKwwwwwK...",
+        ".......KKwwwwK..",
+        "..Q......KwwwK..",
+        "..Q.......KwwwK.",
+        "...........KwwK.",
+        "...........KwwK.",
+        "............KwK.",
+        ".............K..",
+        "................"
+      ]
+    },
+
+    // 狼牙の首飾り：牙を3本つないだ首飾り
+    iconItemWolfFangNecklace: {
+      palette: { ".": null, "K": "#1a1410", "C": "#8a6a48", "B": "#5ab4d8", "H": "#fffaf0", "A": "#d0c4a6" },
+      pixels: [
+        "....KKCCCCKK....",
+        "...KCCKKKKCCK...",
+        "..KCKK....KKCK..",
+        ".KCCK......KCCK.",
+        ".KCK........KCK.",
+        ".KCK........KCK.",
+        ".KCCK......KCCK.",
+        ".KCCCK....KCCCK.",
+        "..KHHAKKKKKHHAK.",
+        "..KHHABHHABHHAK.",
+        "...KHKKHHAKKHK..",
+        "...KHKKHHAKKHK..",
+        "....K.KHHAK.K...",
+        ".......KHK......",
+        ".......KHK......",
+        "........K......."
+      ]
+    },
+    // --- 滴る鍾乳洞の装備と、ハンザキの素材（v1.8.0。私が描いた。作者の見ての返事待ち） ---
+
+    // 流水の刃：細い水色の刃のまわりを、水の帯が二筋めぐる
+    iconItemFlowingBlade: {
+      palette: { ".": null, "K": "#071a2a", "H": "#f0fcff", "B": "#9fdcf0", "D": "#3a8ac0",
+                 "G": "#2a6a9a", "g": "#5ad8f0", "A": "#2a3a4a", "a": "#141c26", "O": "#7ae8ff",
+                 "W": "#5ad8f0", "w": "#c8f4ff" },
+      pixels: [
+        ".............K..",
+        "......w.....KHK.",
+        ".....wW....KHBK.",
+        ".....W....KHBDK.",
+        ".....Ww..KHBDK..",
+        "......wWKHBDK...",
+        ".....K.KHBDKw...",
+        "....KgKHBDK.Ww..",
+        "....KggBDK...W..",
+        "...KKAGGK...wW..",
+        "..KOAaKggK.wW...",
+        "..KOOK.KK.wW....",
+        "...KOK...wW.....",
+        "....K....w......",
+        "................",
+        "................"
+      ]
+    },
+    // 石筍の大槌：石灰の塊の頭。てっぺんに濡れた石筍の先が立つ
+    iconItemStalagmiteMaul: {
+      palette: { ".": null, "K": "#141c22", "L": "#9ab4c0", "M": "#5e7c8a", "D": "#3a5260",
+                 "W": "#c8eaf4", "A": "#6a4a2a", "a": "#4a3018" },
+      pixels: [
+        "..........W.....",
+        ".........KLK....",
+        "........KLMK....",
+        "......KKLMMDKK..",
+        ".....KLLLMMMDDK.",
+        ".....KLMMMMMDDK.",
+        ".....KLMMMDMMDK.",
+        ".....KMMMMMMDDK.",
+        "......KKDDDDKK..",
+        "......KAaK......",
+        ".....KAaK.......",
+        "....KAaK........",
+        "...KAaK.........",
+        "..KAaK..........",
+        ".KMDK...........",
+        "..K............."
+      ]
+    },
+    // 巻貝の鎧：貝の白い胸当てに、巻貝の渦。肩と襟と帯は水色
+    iconItemSnailShellArmor: {
+      palette: { ".": null, "K": "#1a1810", "A": "#d8cdb4", "H": "#fff6e0", "D": "#9a8a6a",
+                 "S": "#7a6a4a", "M": "#3a9ac8", "F": "#a8e8fa" },
+      pixels: [
+        "................",
+        "..KKK......KKK..",
+        ".KHAAKKKKKKAADK.",
+        "KHAAAKMFFMKAAADK",
+        "KHAAAAKMMKAAAADK",
+        ".KHAAASSSSAAADK.",
+        "..KHASAAAASADK..",
+        "..KHASASSASADK..",
+        "..KHASASHASADK..",
+        "..KHASAAASSADK..",
+        "..KHAASSSAAADK..",
+        "..KMMMFFFMMMMK..",
+        "..KHADAAAADADK..",
+        "...KHDDDDDDDK...",
+        "....KKKKKKKK....",
+        "................"
+      ]
+    },
+    // 雫羽の外套：頭巾つきの水色の外套。裾は羽の形に分かれ、胸の留め具は雫
+    iconItemDropFeatherCloak: {
+      palette: { ".": null, "K": "#071a2a", "A": "#4a9ac0", "H": "#8ad4ec", "D": "#2a5a7a",
+                 "N": "#123048", "W": "#c8f4ff" },
+      pixels: [
+        "......KKKK......",
+        ".....KHHAAK.....",
+        "....KHAKKAAK....",
+        "....KHKNNKDK....",
+        "...KHAKNNKADK...",
+        "..KHAAAKKAAADK..",
+        "..KHAAAWAAAADK..",
+        ".KHAAAAAAAAAADK.",
+        ".KHAHAAAAAHAADK.",
+        ".KHAHAAAAAHAADK.",
+        "KHAAHAAAAAHAAADK",
+        "KHAAHAAAAAHAAADK",
+        "KHAHKAHKAHKADADK",
+        "KKHK.KHK.KHK.KDK",
+        ".KK...K...K...K.",
+        "................"
+      ]
+    },
+    // 響きの耳飾り：銀の留め金に、白い真珠。左右に響きの輪
+    iconItemEchoEarring: {
+      palette: { ".": null, "K": "#1a1a24", "S": "#e0e4f0", "s": "#8a90a0", "P": "#f4f0ff",
+                 "p": "#c8c0e0", "q": "#8a80b0", "W": "#ffffff", "R": "#7ae8ff" },
+      pixels: [
+        ".......KKK......",
+        "......KSssK.....",
+        "......KK.KsK....",
+        ".........KsK....",
+        "........KSK.....",
+        "........KsK.....",
+        ".......KKSKK....",
+        "..R...KPPPpK..R.",
+        ".R...KPWPPppK..R",
+        ".R...KPPPPpqK..R",
+        ".R...KPPPpqqK..R",
+        "..R...KppqqK..R.",
+        ".......KKKK.....",
+        "................",
+        "................",
+        "................"
+      ]
+    },
+    // 雫の水よけ札：札に、水の雫の印
+    iconItemDropWard: {
+      palette: wardPalette(plainCard, ["#2a8ab8", "#9ae8fa"]),
+      pixels: wardWith(["AAOAAA", "AAORAA", "AOORRA", "AORRRA", "AORRRA", "AARRAA"])
+    },
+    // 大鯢の皮衣：まだらの濃い皮の長衣。前で合わせ、帯の留め具は水色。濡れた光が2つ
+    iconItemHanzakiHideCoat: {
+      palette: { ".": null, "K": "#140e08", "A": "#5a4a3a", "H": "#8a7a5a", "D": "#3a2e22",
+                 "S": "#2a2018", "B": "#5ad8f0", "W": "#b8a880" },
+      pixels: [
+        "....KKK..KKK....",
+        "...KHAAKKAADK...",
+        "..KHAAAKKAAADK..",
+        ".KHASAAKKAASADK.",
+        ".KHAAAWAKAAAADK.",
+        ".KHAAAAAKASAADK.",
+        ".KHSAAAAKAAAADK.",
+        ".KKKKKKBBKKKKKK.",
+        "..KHAASAKAAADK..",
+        "..KHAAAAKASADK..",
+        "..KHASAAKAAADK..",
+        ".KHAAAAWKAAAADK.",
+        ".KHAAAAAKSAAADK.",
+        ".KDDDDDDKDDDDDK.",
+        "..KKKKKKKKKKKK..",
+        "................"
+      ]
+    },
+    // ハンザキの粘皮：まだらの厚い皮。濡れた光が2つ
+    iconItemHanzakiHide: {
+      palette: { ".": null, "K": "#1a140e", "A": "#6a5a44", "H": "#9a8a64", "D": "#3e3226",
+                 "S": "#2e241a", "W": "#c8f4ff" },
+      pixels: [
+        "................",
+        "................",
+        "...KKKK...KK....",
+        "..KHHAAKKKAAK...",
+        ".KHWHAASAAAADK..",
+        ".KHHAAAAAASAADK.",
+        "..KHASAAAAAAADK.",
+        "..KHAAAAWAAADK..",
+        ".KHAAAAAAASAADK.",
+        ".KHASAAAAAAADDK.",
+        "..KAAAASAAADDK..",
+        "..KDDAAAADDDK...",
+        "...KKDDDDKKK....",
+        ".....KKKK.......",
+        "................",
+        "................"
+      ]
+    }
+  });
 })(window.MyGame);

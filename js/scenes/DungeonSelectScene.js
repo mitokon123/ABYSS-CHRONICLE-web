@@ -48,6 +48,8 @@
     this.panel = new NS.Panel(game.ctx, this.theme);
     this.renderer = new NS.Renderer(game.ctx);
     this.backButton = new NS.BackButton(this.panel, game.data);
+    // 穴を選ぶ説明（v1.8.0）
+    this.tutorial = new NS.TutorialBox(this.panel, game);
     this.sprites = new NS.SpriteRenderer(game.ctx, game.assets);
     this.pane = new NS.DetailPane(this.panel, this.sprites, this.layout.detail || { x: 0, y: 0, w: 0, h: 0 });
 
@@ -104,6 +106,11 @@
     if (this.regionIndex >= this.regions.length + (this.cupShown ? 1 : 0)) this.regionIndex = 0;
     // 区画を選んでいる途中で戻ってきたときは、その穴の一覧を作り直す
     if (this.phase === "dungeon") this._openRegion(this.regionIndex, true);
+
+    // 穴が2つ以上開いて、初めて穴の一覧を見たときの説明（v1.8.0）。大会の一覧では出さない
+    if (this.game.tutorial && !this._isCupMode() && !this.singleRegion && this.phase === "region") {
+      this.tutorial.show(this.game.tutorial.take("regionSelect"));
+    }
   };
 
   /**
@@ -145,6 +152,12 @@
 
   DungeonSelectScene.prototype.update = function () {
     var input = this.game.input;
+
+    // 説明が出ている間は、それだけを見る（v1.8.0）
+    if (this.tutorial.isActive()) {
+      this.tutorial.handleInput(input);
+      return;
+    }
 
     // 「予選に向かいますか？」を出している間は、それだけを見る（v1.5.0）
     if (this.confirming) {
@@ -467,6 +480,7 @@
     this._renderHint();
     this.backButton.render();
     if (this.confirming) this._renderConfirm(ctx);
+    this.tutorial.render();
   };
 
   DungeonSelectScene.prototype._renderHeading = function () {
@@ -543,6 +557,9 @@
   /** 「揺籃の穴 の主を4体記録すると開く」 */
   DungeonSelectScene.prototype._regionLockedHint = function (region) {
     var condition = region.unlockedBy || {};
+    // 出来事で開く穴（v1.8.0。涵養の穴＝クロニクル杯の予選を勝ち抜く）
+    var eventName = NS.DungeonCatalog.pendingEventName(condition);
+    if (eventName) return (this.texts.eventLockedHint || "{name} を勝ち抜くと開く").replace("{name}", eventName);
     var source = condition.region ? (this.game.data.regions || {})[condition.region] : null;
     if (source) {
       var total = NS.DungeonCatalog.idsInRegion(this.game.data, source.id).length;
@@ -915,7 +932,10 @@
     if (!unlocked) {
       head.chips.push({ label: T.locked || "", color: t.hintColor });
       var required = this._requiredNameShown(dungeon.unlockedBy);
-      pushWrapped(lines, (T.lockedHint || "").replace("{name}", required || ""), cpl, { dim: true });
+      var eventName = NS.DungeonCatalog.pendingEventName(dungeon.unlockedBy);
+      var hint = eventName ? (T.eventLockedHint || "{name} を勝ち抜くと開く").replace("{name}", eventName)
+                           : (T.lockedHint || "").replace("{name}", required || "");
+      pushWrapped(lines, hint, cpl, { dim: true });
       return { head: head, lines: lines };
     }
     // 準備中の区画は、中身がまだ無いことだけ（階数と推奨レベルは作っている途中で変わるので出さない）
@@ -1226,7 +1246,8 @@
         var saved = firstPass && game.saveProgress ? game.saveProgress().success : false;
         if (saved) game.audio.playSe("save");
         var home = new NS.HomeScene(game, saved ? (texts.passedSaved || null) : null);
-        if (firstPass && scenes.passed) game.playStoryScene(scenes.passed, home);
+        // 場面17 のあと、拠点に着くところで場面19「涵養の穴へ」など（homeReturn）も続けて流す（v1.8.0）
+        if (firstPass && scenes.passed) game.playStoryScene(scenes.passed, home, "homeReturn");
         else game.scenes.change(home);
         return true;
       }

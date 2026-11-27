@@ -173,6 +173,12 @@
           { item: "ancientSap", unlockedBy: "ancientRoots" },
           { item: "brassGear",  unlockedBy: "ancientRoots" },
 
+          // 滴る鍾乳洞の素材（v1.8.0）。クリアしてから。響きの真珠・狼牙の首飾り（落とす 10%）とハンザキの粘皮（主）は並べない
+          { item: "snailShell",      unlockedBy: "drippingCave" },
+          { item: "dropFeather",     unlockedBy: "drippingCave" },
+          { item: "stalagmiteShard", unlockedBy: "drippingCave" },
+          { item: "blueWolfClaw",    unlockedBy: "drippingCave" },
+
           // 大きく回復する薬。毒沼をクリアしてから並ぶ。
           //   毒沼までは回復薬（50G / 50回復）で足りる。
           //   ここで初めて「1ターンで100戻す」選択肢を出す

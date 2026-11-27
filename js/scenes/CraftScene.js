@@ -44,6 +44,8 @@
     this.sprites = new NS.SpriteRenderer(game.ctx, game.assets);
     this.list = new NS.ScrollList(this.panel, this.layout.list, { sprites: this.sprites });
     this.confirmMenu = new NS.CommandMenu(this.panel, this.layout.confirmMenu);
+    // 作る回数の窓の下の押せるボタン（v1.8.0。スマホ・マウスで回数を変えて決める）
+    this.quantityButtons = new NS.QuantityButtons(this.panel, NS.QuantityButtons.areaFor(this.layout), this.layout.quantityStep || 10, this.texts.quantityOk);
     this.backButton = new NS.BackButton(this.panel, game.data);
     this.craftSystem = new NS.CraftSystem(game.data);
 
@@ -267,12 +269,15 @@
   /** 作る数を決める。←→ で1つずつ、↑↓ で quantityStep ずつ。決定で確認へ */
   CraftScene.prototype._updateQuantity = function (input) {
     var step = this.layout.quantityStep || 10;
+    // 押せるボタン（−10 −1 +1 +10・決定）。決定はキーの決定と同じ
+    var tapped = this.quantityButtons.handleInput(input);
+    if (tapped && tapped.delta) { this._changeCount(tapped.delta); return; }
     if (input.isPressed("right")) this._changeCount(1);
     if (input.isPressed("left")) this._changeCount(-1);
     if (input.isPressed("up")) this._changeCount(step);
     if (input.isPressed("down")) this._changeCount(-step);
     if (input.isPressed("cancel")) { this.phase = "list"; this.order = null; return; }
-    if (input.isPressed("confirm")) {
+    if (input.isPressed("confirm") || (tapped && tapped.confirm)) {
       this.confirmMenu.setItems([
         { label: this.texts.yes || "はい", value: "yes" },
         { label: this.texts.no || "いいえ", value: "no" }
@@ -615,7 +620,7 @@
     this._orderRows.push([x, this._textRight(after, x), y]);
     this._orderBottom = y;
 
-    if (!confirming) return;
+    if (!confirming) { this.quantityButtons.render(); return; }
     // 問いは、はい／いいえ（confirmMenu）の左に折り返して出す
     var q = NS.wrapText(fill(texts.confirmCraft || "", { name: item.name || "", count: per * n }),
       (this.layout.orderQuestionChars || 12));

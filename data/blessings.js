@@ -16,6 +16,8 @@
  * price       : 買値（locked のものだけ意味を持つ）
  * unlockedBy  : 謎の商人に並ぶ条件（locked のものだけ）。書き方は data/dungeons.js の unlockedBy と同じ。
  *               省略すると、商人が現れた時点（静寂の深層クリア）から並ぶ
+ * afterEvent  : その出来事を済ませるまで謎の商人に並ばない（v1.8.0。"chronicleQualifier" ＝ クロニクル杯の予選を勝ち抜いた。
+ *               写本堂と同じ印。ShopScene._buildBlessingRows）
  *
  * ▼ 効果は特性と同じ種類がすべて使える（regen / drain / firstStrike / counterStatus / undying も）。
  *   戦闘で働いたときの文には、加護の名前が出る（「スライム の 疾き初手!」）
@@ -315,6 +317,127 @@
       unlockedBy: "ivyCorridor",
       price: 1500,
       effects: [ { type: "tailwind", value: 1.88, turns: 2 } ]
+    },
+
+    // --- クロニクル杯の予選を勝ち抜くと謎の商人が売る加護（v1.8.0。作者の指定 2026-11-26「加護を10個追加したい、予選突破後に買えるようになる」）---
+    //
+    // 名前・効果・値段・出やすさは私の案を作者がそのまま確定（2026-11-26「このままでいいよ」。確認表は game/加護の追加_確認.md）。
+    // 1〜5 は 1.8.0 で増えた技の種類ごとの与ダメージ（skillKind。特性「剣豪」と同じ仕組み）。
+    // 癒し手の祈りは回復の技の量（healDealt。全快・道具・再生・吸血には効かない）。
+    // 陽炎の外套は陽炎の舞（回避率 +15%）と重なる（足し算）
+
+    resonanceTune: {
+      id: "resonanceTune",
+      name: "共鳴の調べ",
+      description: "共鳴の技で与えるダメージが15%増える。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2000,
+      effects: [ { type: "damageDealt", value: 1.15, skillKind: "resonance" } ]
+    },
+
+    dragonSigh: {
+      id: "dragonSigh",
+      name: "竜の吐息",
+      description: "ブレスの技で与えるダメージが15%増える。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2000,
+      effects: [ { type: "damageDealt", value: 1.15, skillKind: "breath" } ]
+    },
+
+    bladeEdge: {
+      id: "bladeEdge",
+      name: "剣の冴え",
+      description: "斬撃の技で与えるダメージが15%増える。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2000,
+      effects: [ { type: "damageDealt", value: 1.15, skillKind: "slash" } ]
+    },
+
+    fistMastery: {
+      id: "fistMastery",
+      name: "拳の極意",
+      description: "体技の技で与えるダメージが15%増える。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2000,
+      effects: [ { type: "damageDealt", value: 1.15, skillKind: "body" } ]
+    },
+
+    danceSense: {
+      id: "danceSense",
+      name: "舞の心得",
+      description: "踊りの技で与えるダメージが15%増える。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2000,
+      effects: [ { type: "damageDealt", value: 1.15, skillKind: "dance" } ]
+    },
+
+    healerPrayer: {
+      id: "healerPrayer",
+      name: "癒し手の祈り",
+      description: "回復の技で回復する量が20%増える。",
+      weight: 0.7,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 1800,
+      effects: [ { type: "healDealt", value: 1.2 } ]
+    },
+
+    welling: {
+      id: "welling",
+      name: "湧き出る泉",
+      description: "毎ターンの終わりに、PPが1戻る。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2500,
+      effects: [ { type: "ppRegen", value: 1 } ]
+    },
+
+    hazeMantle: {
+      id: "hazeMantle",
+      name: "陽炎の外套",
+      description: "回避率が5%上がる。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2500,
+      effects: [ { type: "evasionBonus", value: 0.05 } ]
+    },
+
+    allWard: {
+      id: "allWard",
+      name: "万象の守り",
+      description: "すべての状態異常への耐性が2上がる。",
+      weight: 0.5,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 2200,
+      effects: [ { type: "resistBonus", status: "all", value: 2 } ]
+    },
+
+    kingsBearing: {
+      id: "kingsBearing",
+      name: "王者の風格",
+      description: "攻撃・防御・素早さが5%ずつ上がる。",
+      weight: 0.35,
+      locked: true,
+      afterEvent: "chronicleQualifier",
+      price: 3500,
+      effects: [
+        { type: "statMultiplier", stat: "attack", value: 1.05 },
+        { type: "statMultiplier", stat: "defense", value: 1.05 },
+        { type: "statMultiplier", stat: "speed", value: 1.05 }
+      ]
     }
   };
 })(window.MyGame);

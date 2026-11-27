@@ -22,7 +22,9 @@
  *   { type:"resistBonus",    element:"fire", value:3 }  … 耐性の数値そのものを上げる
  *   { type:"accuracyMultiplier", value:0.8 }  … 命中率に倍率（盲目とは別）
  *   { type:"healDealt",      value:1.2 }  … 自分が使う回復の技の回復量に倍率（粘晶のネックレス）
- *   戦闘中に働くもの（regen / regenOverTime / ppRegen / counterStatus / counterModifier / onHitStatus / damageByTargetHp / drain / firstStrike / undying / shedStatus / tailwind / wardAlly）は
+ *   { type:"healReceived",   value:0.5 }  … 受ける回復に倍率（焦熱。v1.8.0）
+ *   { type:"evasionBonus",   value:0.15 } … 回避率に足し算（陽炎の舞。v1.8.0）
+ *   戦闘中に働くもの（regen / regenOverTime / ppRegen / counterStatus / counterModifier / onHitStatus / damageByTargetHp / drain / firstStrike / undying / shedStatus / tailwind / wardAlly / slipDamage）は
  *   ここでは集めるだけで、働かせるのは BattleSystem（_findEffects で拾う）
  *
  * ▼ 倍率と加算の違い
@@ -79,6 +81,16 @@
       effects = effects.concat(monster.encounterEffects);
     }
 
+    // 育つ石（growingStat。v1.8.0）で育った分。強化とは別に数えるので、強化とも重なる（作者の指定）
+    var grown = monster._grownStats;
+    if (grown) {
+      for (var gs in grown) {
+        if (Object.prototype.hasOwnProperty.call(grown, gs) && grown[gs] !== 1) {
+          effects.push({ type: "statMultiplier", stat: gs, value: grown[gs] });
+        }
+      }
+    }
+
     // バフ／デバフ（その戦闘のあいだだけ）。ターン数で切れ、戦闘終了で消える。
     // exclusive が同じものは重ならない：強いほう（1 からの離れが大きいほう）だけ効く（鼓舞の舞とハウリング。v1.5.0 作者の指定）
     var modifiers = monster.modifiers || [];
@@ -88,10 +100,23 @@
       if (!group) continue;
       if (!strongest[group] || modifierStrength(modifiers[i]) > modifierStrength(strongest[group])) strongest[group] = modifiers[i];
     }
+    // 同じ能力を変える強化どうし・弱体どうしは、いちばん強いものだけ効く（v1.8.0・2026-11-25 作者の指定）。
+    //   能力の倍率（statMultiplier）と命中の倍率（accuracyMultiplier）を、能力と上げ下げの向きごとに1つにする。
+    //   上げる強化と下げる弱体は別に数える（ブレイブとちからぬきは両方効く）。
+    //   受ける／与えるダメージ・耐性などは今までどおり重なる（大地崩落とロックスパイク・呪い）
+    var bestStat = {}, statOrder = [];
     for (i = 0; i < modifiers.length; i++) {
       if (modifiers[i].exclusive && strongest[modifiers[i].exclusive] !== modifiers[i]) continue;
-      effects = effects.concat(modifiers[i].effects || []);
+      var list = modifiers[i].effects || [];
+      for (var k = 0; k < list.length; k++) {
+        var e = list[k];
+        var key = statGroupOf(e);
+        if (!key) { effects.push(e); continue; }
+        if (!bestStat[key]) statOrder.push(key);
+        if (!bestStat[key] || Math.abs(Math.log(e.value)) > Math.abs(Math.log(bestStat[key].value))) bestStat[key] = e;
+      }
     }
+    for (i = 0; i < statOrder.length; i++) effects.push(bestStat[statOrder[i]]);
 
     // 状態異常。data/statuses.js に effects を書いたものだけが効く（いまは呪いだけ）。
     // 書き方はバフ／デバフとまったく同じなので、ダメージ計算側は何も変えなくてよい
@@ -269,6 +294,30 @@
   };
 
   /**
+   * 受ける回復に掛かる倍率（何も無ければ 1）。{ type:"healReceived", value:0.5 }（焦熱。v1.8.0）。
+   * 回復の技・再生・吸収・樹液の膜・持ち物の回復のどれにも効く（MonsterInstance.heal で掛ける）。
+   * 倒れた者を起こすときは効かない（倒れると弱体は消える）
+   */
+  EffectSystem.prototype.getHealReceivedMultiplier = function (monster) {
+    return this._multiply(monster, function (effect) {
+      return (effect.type === "healReceived") ? effect.value : null;
+    });
+  };
+
+  /**
+   * 回避率への足し算（何も無ければ 0）。{ type:"evasionBonus", value:0.15 }（陽炎の舞。v1.8.0）。
+   * 種族の回避率（monsters.js の evasion）に足す。ブレス・必中の技はもともとかわせない
+   */
+  EffectSystem.prototype.getEvasionBonus = function (monster) {
+    var effects = this.collectEffects(monster);
+    var total = 0;
+    for (var i = 0; i < effects.length; i++) {
+      if (effects[i] && effects[i].type === "evasionBonus") total += effects[i].value || 0;
+    }
+    return total;
+  };
+
+  /**
    * 攻撃のほかのダメージ（毒・反動・罠）に掛かる倍率（何も無ければ 1）。
    * damageTaken のうち allDamage: true のものだけを見る。ふつうの軽減（厚い皮膚など）は攻撃にしか効かない
    */
@@ -328,6 +377,18 @@
   };
 
   /** 強化の強さ（効果の値の 1 からの離れの合計。重ならない強化どうしを比べる） */
+  /**
+   * 「強いものだけ効く」で比べる組（v1.8.0）。能力の倍率と命中の倍率だけ。
+   * 条件つき（condition）のものは組にしない（いまは技に無い）。組にしないものは null
+   */
+  function statGroupOf(effect) {
+    if (!effect || effect.condition || !(effect.value > 0) || effect.value === 1) return null;
+    var dir = effect.value > 1 ? "up" : "down";
+    if (effect.type === "statMultiplier") return "stat:" + effect.stat + ":" + dir;
+    if (effect.type === "accuracyMultiplier") return "accuracy:" + dir;
+    return null;
+  }
+
   function modifierStrength(mod) {
     var total = 0, list = mod.effects || [];
     for (var i = 0; i < list.length; i++) total += Math.abs((list[i].value || 1) - 1);
@@ -459,6 +520,12 @@
       text = fillText(party.effectTailwind, { turns: effect.turns || 1, value: effect.value });
     } else if (effect.type === "wardAlly") {
       text = party.effectWardAlly || "";
+    } else if (effect.type === "healReceived") {
+      text = (party.healReceivedLabel || "受ける回復") + " ×" + effect.value;
+    } else if (effect.type === "evasionBonus") {
+      text = (party.evasionLabel || "回避率") + " +" + percentOf(effect.value) + "%";
+    } else if (effect.type === "slipDamage") {
+      text = fillText(party.effectSlipDamage || "毎ターン {min}〜{max} のダメージ", { min: effect.min, max: effect.max || effect.min });
     }
 
     if (text && effect.condition) text += describeCondition(effect.condition);

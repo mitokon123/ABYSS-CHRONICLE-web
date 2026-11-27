@@ -5,7 +5,8 @@
  * 中身の決まりごとは ストーリー構成.md。**そこに書かれていない固有名詞・設定は足さない。**
  * 本文の元は scenario_yoran_改訂版.md（揺籃の穴 場面1〜8。2026-10-21 に作者が話を根本から変えた版）と
  * scenario_houga.md（萌芽の穴 場面9〜13。2026-11-18 に作者が送った版。v1.5.0）と
- * scenario_yosen.md（クロニクル杯 予選 場面14〜18。同じ日に作者が送った版。v1.5.0）。直すときは両方をそろえる。
+ * scenario_yosen.md（クロニクル杯 予選 場面14〜18。同じ日に作者が送った版。v1.5.0）と
+ * scenario_kanyou.md（涵養の穴 場面19〜21。2026-11-27 に作者が書き直した版。v1.8.0）。直すときは両方をそろえる。
  *   改訂版の筋：主人公はモンスターが好きで、年に一度の大会「クロニクル杯」を目指して認定試験を受ける。
  *   前の版の「燃える村・親が消えた夜・小さな青い影・天蓋会」は外した（天蓋会は第2部で扱う）
  *
@@ -246,7 +247,7 @@
             "オルドは黙って頁をめくり、",
             "ある一行で、指を止めた。"
           ] },
-          // 1行目はスライムの図鑑の説明文の引用（早見表/図鑑説明文.txt）。図鑑を変えたらここも揃える
+          // 1行目はスライムの図鑑の説明文の引用（早見表/モンスターと絆.txt の「図鑑説明文」）。図鑑を変えたらここも揃える
           { speaker: "オルド", lines: [
             "「人を襲う可能性はある」か。",
             "……そのスライムは今日、お前を襲ったか？"
@@ -993,6 +994,167 @@
           { transition: "black", bg: "hougaCamp", actors: [ PLAYER, SLIME ], lines: [
             "帰り道、スライムが{me}の足に",
             "ぴたりと寄り添っていた。"
+          ] }
+        ]
+      },
+
+      /**
+       * --- 場面19 涵養の穴へ（v1.8.0・scenario_kanyou.md） ---
+       * 予選を勝ち抜いた場面17のあと、拠点へ戻るところで続けて流れる（Qualifier が playStoryScene に "homeReturn" を渡す）。
+       * もう勝ち抜いているセーブでは、次に拠点へ着いたとき（homeReturn）に流れる。
+       * 滴る鍾乳洞が遊べるようになるまで（data/dungeons.js の ready: false のあいだ）は流さない（when.ready）。2026-11-27 に開いた。
+       * これを見たあとは、拠点が涵養の穴のほとりに移る（Game.getHomePlace・data/ui.js の home.places.kanyou）
+       */
+      kanyouArrival: {
+        id: "kanyouArrival",
+        trigger: "homeReturn",
+        when: { event: "chronicleQualifier", ready: "drippingCave" },
+        order: 100,
+        bgm: "home",
+        bg: "kanyouCamp",
+        style: "narration",
+        pages: [
+          { transition: "black", actors: [ PLAYER ], lines: [
+            "本戦まで、まだ日がある。",
+            "{me}たちは、三つ目の穴へ向かった。"
+          ] },
+          { lines: [
+            "穴の縁に立つと、足もとの岩が濡れていた。",
+            "奥から、水の滴る音が",
+            "いくつも重なって聞こえてくる。"
+          ] },
+          { style: "dialogue", speaker: "オルド", actors: [ PLAYER, ORD ], lines: [
+            "涵養の穴だ。",
+            "水が地にしみて、命を育てる穴。"
+          ] },
+          { style: "dialogue", speaker: "{player}", lines: [
+            "オルドさん、また来てくれたんですね。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "また出張所の番だ。",
+            "……お前の行く先に、出張所があるだけだ。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "一つ言っておく。",
+            "ここの連中は、萌芽とは違う。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "補助で手を組んでくる。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "主は二体。入口の鍾乳洞と、底の湖。",
+            "大会の前に、ここで鍛え直してこい。"
+          ] },
+          { actors: [ PLAYER, SLIME, ORD ], lines: [
+            "スライムが、濡れた岩の上を",
+            "ぷるんと跳ねて進んでいった。",
+            "水の匂いに、どこか得意げだった。"
+          ] },
+          { style: "title", bg: "night", actors: [], lines: [
+            "第三章",
+            "涵養の穴"
+          ] }
+        ]
+      },
+
+      /**
+       * --- 場面20 鍾乳洞から戻ったとき（v1.8.0。滴る鍾乳洞から、はじめて拠点に戻ったとき。クリアしていなくても） ---
+       * 戻った印は結果の画面で付ける（Game.markDungeonReturned・when.returned）。
+       * はじめての挑戦でハンザキまで倒したときは、このあとに場面21が続く（order）
+       */
+      dripReturned: {
+        id: "dripReturned",
+        trigger: "homeReturn",
+        when: { returned: "drippingCave", seenAny: ["kanyouArrival"] },
+        order: 110,
+        bgm: "home",
+        bg: "kanyouCamp",
+        style: "narration",
+        pages: [
+          { actors: [ PLAYER ], lines: [
+            "滴る鍾乳洞は、静かだった。",
+            "静かなまま、こちらを崩しにきた。"
+          ] },
+          { lines: [
+            "石筍に足を取られ、動きが鈍った隙に、",
+            "青い狼が、雫の音に紛れて鋭い爪で裂いてくる。"
+          ] },
+          { style: "dialogue", speaker: "{player}", actors: [ PLAYER, ORD ], lines: [
+            "……言われたとおりでした。",
+            "手を組んできて……"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "崩されたら、立て直せ。",
+            "立て直せないなら、崩される前に潰せ。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "記録に残しておくんだな。",
+            "お前なりに攻略するんだ。"
+          ] },
+          { lines: [
+            "{me}は記録を開いた。",
+            "見たとおりに書く。",
+            "それが、次に勝つための一行になる。"
+          ] }
+        ]
+      },
+
+      /**
+       * --- 場面21 ハンザキのあと（v1.8.0。滴る鍾乳洞をクリアして拠点に戻ったとき） ---
+       * 「水の滴る音（あれば）」の効果音はまだ無いので鳴らさない
+       */
+      dripCleared: {
+        id: "dripCleared",
+        trigger: "homeReturn",
+        when: { cleared: "drippingCave", seenAny: ["kanyouArrival"] },
+        order: 120,
+        bgm: "home",
+        bg: "drip",
+        letterbox: true,
+        style: "narration",
+        pages: [
+          { actors: [], lines: [
+            "淵の主は、大きな山椒魚だった。",
+            "ぬめる厚い皮が、どの刃も鈍らせた。"
+          ] },
+          { lines: [
+            "倒した。そう思ったとき",
+            "主は裂けかけた体で、",
+            "もう一度、首をもたげた。"
+          ] },
+          { lines: [
+            "二度目は、立たなかった。",
+            "淵の水面が、静かに揺れていた。"
+          ] },
+          { style: "dialogue", speaker: "オルド", transition: "black", bg: "kanyouCamp", actors: [ PLAYER, ORD ], lines: [
+            "ハンザキに会ったか。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "半分に裂いても生きている。",
+            "だから、半裂き。昔からの呼び名だ。"
+          ] },
+          { style: "dialogue", speaker: "{player}", lines: [
+            "一度起き上がりました。",
+            "……怖かったです。"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "怖いと思えたなら、上出来だ。",
+            "それでも倒しきったんだろう。"
+          ] },
+          { actors: [ PLAYER, SLIME, ORD ], lines: [
+            "焚き火の向こうで、",
+            "仲間たちが、濡れた体を寄せ合って眠っていた。"
+          ] },
+          { lines: [
+            "そのとき、穴の奥から、低い音が届いた。",
+            "水の流れに混じって、とん、とん、と。"
+          ] },
+          { style: "dialogue", speaker: "{player}", lines: [
+            "……太鼓？"
+          ] },
+          { style: "dialogue", speaker: "オルド", lines: [
+            "水路の先を記録したものは少ない。",
+            "行くなら、明日だ。今日は寝ろ。"
           ] }
         ]
       },

@@ -4297,6 +4297,260 @@
       offsetY: { amplitude: -1, period: 4200 }
     },
 
+    // --- 涵養の穴・滴る鍾乳洞の在来種（v1.8.0・2026-11-26。私が作った。シズクドリは鳥の、セキジュンはコハクカブトの動きを使う） ---
+
+    // ミズマイマイ：ふだんは目の柄がゆらゆら揺れ、体がゆっくり伸び縮みする（sprite の4枚）
+    snailIdle: {
+      frames: { interval: 560 },
+      scaleX: { amplitude: 0.02,  period: 2240 },
+      scaleY: { amplitude: -0.02, period: 2240 }
+    },
+    // 体当たり。目の柄を伸ばして溜め、足を広げてのしかかる
+    snailBump: {
+      duration: 640,
+      offsetY: { amount: 16, shape: "windup", backRatio: 0.45 },
+      scaleX:  { amount: 0.08,  shape: "pulse" },
+      scaleY:  { amount: -0.08, shape: "pulse" },
+      poses: [
+        { at: 0,    pose: "up" },
+        { at: 0.45, pose: "wide" },
+        { at: 0.85, pose: null }
+      ]
+    },
+    // 共鳴・ブレス・味方への技。殻の中で水を響かせる（目の柄を伸ばし、体が小刻みに震える）
+    snailCast: {
+      duration: 820,
+      scaleY:  { amount: 0.05, shape: "pulse" },
+      offsetX: { amount: 1.5,  shape: "wobble", cycles: 4 },
+      poses: [
+        { at: 0,    pose: "up" },
+        { at: 0.85, pose: null }
+      ]
+    },
+    snailHit: {
+      duration: 420,
+      scaleX: { amount: 0.08,  shape: "decay", cycles: 2 },
+      scaleY: { amount: -0.08, shape: "decay", cycles: 2 },
+      alpha:  { amount: -0.3,  shape: "fade" },
+      poses: [
+        { at: 0,    pose: "hit" },
+        { at: 0.8,  pose: null }
+      ]
+    },
+    snailCheer: {
+      duration: 800,
+      offsetY: { amount: -5, shape: "hops", count: 2 },
+      poses: [
+        { at: 0,    pose: "up" },
+        { at: 0.5,  pose: "wide" },
+        { at: 0.75, pose: "up" },
+        { at: 0.92, pose: null }
+      ]
+    },
+    // 眠り：殻に引っこむ
+    snailSleeping: {
+      pose: "sleep",
+      scaleY: { offset: -0.02, amplitude: 0.01, period: 5000 }
+    },
+
+    /**
+     * --- ハンザキ（滴る鍾乳洞の主。v1.8.0） ---
+     * 姿の絵は作者が描いた（2026-11-27。data/sprites_marsh.js の hanzaki〜。参考絵/hanzaki_sprites/ の hanzaki_atlas.json）。
+     * コマの長さは作者の atlas のまま。重く平たい体なので、踏み込みはウルヴァーグより少し短い。
+     * 技ごとには分けない（ウルヴァーグと同じ。技の種類ごとに同じ動き）。絵は右向き
+     */
+    // ふだん：作者の idle 4枚（260ms ずつ）。体の上下はコマ2周で1回
+    hanzakiIdle: {
+      frames:  { interval: 260 },
+      scaleY:  { amplitude: 0.012, period: 2080 },
+      offsetY: { amplitude: -1,    period: 2080, phase: 0.1 }
+    },
+    // 通常攻撃（噛みつく）：atlas の attack 6枚（690ms）
+    hanzakiBite: {
+      duration: 690,
+      offsetY: { amount: 16,    shape: "windup", backRatio: 0.3 },
+      rotate:  { amount: 0.01,  shape: "windup", backRatio: 0.3 },
+      poses: [
+        { at: 0, pose: "attack0" },
+        { at: 0.203, pose: "attack1" },
+        { at: 0.333, pose: "attack2" },
+        { at: 0.507, pose: "attack3" },
+        { at: 0.609, pose: "attack4" },
+        { at: 0.797, pose: "attack5" }
+      ]
+    },
+    // 体技・斬撃：atlas の skill 8枚（750ms）。尾を振り上げて叩きつける
+    hanzakiSlam: {
+      duration: 750,
+      offsetY: { amount: 18,    shape: "windup", backRatio: 0.35 },
+      rotate:  { amount: 0.012, shape: "windup", backRatio: 0.35 },
+      scale:   { amount: 0.03,  shape: "windup", backRatio: 0.35 },
+      poses: [
+        { at: 0, pose: "skill0" },
+        { at: 0.147, pose: "skill1" },
+        { at: 0.267, pose: "skill2" },
+        { at: 0.36, pose: "skill3" },
+        { at: 0.493, pose: "skill4" },
+        { at: 0.613, pose: "skill5" },
+        { at: 0.707, pose: "skill6" },
+        { at: 0.84, pose: "skill7" }
+      ]
+    },
+    // 共鳴・ブレス・強化：atlas の magic 5枚（1040ms）。その場で頭を持ち上げる（踏み込まない）
+    hanzakiCast: {
+      duration: 1040,
+      scaleY:  { amount: 0.03,   shape: "pulse" },
+      scaleX:  { amount: 0.015,  shape: "pulse" },
+      poses: [
+        { at: 0, pose: "magic0" },
+        { at: 0.173, pose: "magic1" },
+        { at: 0.327, pose: "magic2" },
+        { at: 0.481, pose: "magic3" },
+        { at: 0.692, pose: "magic4" }
+      ]
+    },
+    // 被弾：atlas の hit 1枚（300ms）。そのあとはふだんの絵に戻り、揺れ戻りだけ 420ms まで
+    hanzakiHurt: {
+      duration: 420,
+      offsetY: { amount: 6,      shape: "decay", cycles: 2 },
+      rotate:  { amount: -0.015, shape: "decay", cycles: 2 },
+      alpha:   { amount: -0.3,   shape: "fade" },
+      poses: [
+        { at: 0,     pose: "hit" },
+        { at: 0.714, pose: null }
+      ]
+    },
+    // 回避：atlas の dodge 4枚（390ms）＋横へすべる
+    hanzakiDodge: {
+      duration: 540,
+      offsetX: { amount: 20, outRatio: 0.3 },
+      poses: [
+        { at: 0, pose: "dodge0" },
+        { at: 0.148, pose: "dodge1" },
+        { at: 0.315, pose: "dodge2" },
+        { at: 0.481, pose: "dodge3" },
+        { at: 0.722, pose: null }
+      ]
+    },
+    // レベルアップ・スカウトに応じたとき：共鳴の動きを速めに流す（ウルヴァーグと同じ）
+    hanzakiCheer: {
+      duration: 700,
+      scaleY:  { amount: 0.03,   shape: "pulse" },
+      scaleX:  { amount: 0.015,  shape: "pulse" },
+      poses: [
+        { at: 0, pose: "magic0" },
+        { at: 0.173, pose: "magic1" },
+        { at: 0.327, pose: "magic2" },
+        { at: 0.481, pose: "magic3" },
+        { at: 0.692, pose: "magic4" }
+      ]
+    },
+    // 眠り：atlas の sleep 1枚（水たまりに腹をつけて眠る）
+    hanzakiSleeping: {
+      pose: "sleep",
+      scaleY: { offset: -0.01, amplitude: 0.01, period: 5000 }
+    },
+
+    /**
+     * --- ウルヴァーグ（涵養の穴・滴る鍾乳洞。2026-11-26） ---
+     * 姿の絵は作者が描いた（data/sprites_marsh.js の ulvarg〜。参考絵/ulvarg_sprites/ の ulvarg_atlas.json）。
+     * コマの長さは作者の atlas のまま。体の伸び縮み・踏み込みはザンガルドと同じくらい軽く重ねているだけ。
+     * 技ごとには分けない（ザンガルドと同じ。技の種類ごとに同じ動き）。絵は右向き
+     */
+    // ふだん：作者の idle 4枚（220ms ずつ＝880ms）。胸のふくらみはコマ2周で1回
+    ulvBreathe: {
+      frames:  { interval: 220 },
+      scaleY:  { amplitude: 0.015, period: 1760 },
+      offsetY: { amplitude: -1,    period: 1760, phase: 0.1 }
+    },
+    // 通常攻撃（爪で斬る）：atlas の attack 6枚（560ms）。当たる瞬間（約400ms）は attack4
+    ulvSlash: {
+      duration: 560,
+      offsetY: { amount: 20,    shape: "windup", backRatio: 0.3 },
+      rotate:  { amount: 0.012, shape: "windup", backRatio: 0.3 },
+      poses: [
+        { at: 0, pose: "attack0" },
+        { at: 0.161, pose: "attack1" },
+        { at: 0.286, pose: "attack2" },
+        { at: 0.482, pose: "attack3" },
+        { at: 0.589, pose: "attack4" },
+        { at: 0.804, pose: "attack5" }
+      ]
+    },
+    // 体技・斬撃：atlas の skill 8枚（560ms）
+    ulvCleave: {
+      duration: 560,
+      offsetY: { amount: 24,    shape: "windup", backRatio: 0.35 },
+      rotate:  { amount: 0.015, shape: "windup", backRatio: 0.35 },
+      scale:   { amount: 0.03,  shape: "windup", backRatio: 0.35 },
+      poses: [
+        { at: 0, pose: "skill0" },
+        { at: 0.125, pose: "skill1" },
+        { at: 0.25, pose: "skill2" },
+        { at: 0.375, pose: "skill3" },
+        { at: 0.5, pose: "skill4" },
+        { at: 0.625, pose: "skill5" },
+        { at: 0.75, pose: "skill6" },
+        { at: 0.875, pose: "skill7" }
+      ]
+    },
+    // 共鳴・ブレス・強化：atlas の magic 5枚（940ms）。その場で胸をふくらませる（踏み込まない）
+    ulvResonate: {
+      duration: 940,
+      scaleY:  { amount: 0.04,   shape: "pulse" },
+      scaleX:  { amount: 0.02,   shape: "pulse" },
+      rotate:  { amount: -0.008, shape: "pulse" },
+      poses: [
+        { at: 0, pose: "magic0" },
+        { at: 0.17, pose: "magic1" },
+        { at: 0.319, pose: "magic2" },
+        { at: 0.468, pose: "magic3" },
+        { at: 0.681, pose: "magic4" }
+      ]
+    },
+    // 被弾：atlas の hit 1枚（300ms）。そのあとはふだんの絵に戻り、揺れ戻りだけ 420ms まで
+    ulvHit: {
+      duration: 420,
+      offsetY: { amount: 7,      shape: "decay", cycles: 2 },
+      rotate:  { amount: -0.018, shape: "decay", cycles: 2 },
+      alpha:   { amount: -0.3,   shape: "fade" },
+      poses: [
+        { at: 0,     pose: "hit" },
+        { at: 0.714, pose: null }
+      ]
+    },
+    // 回避：atlas の dodge 4枚（370ms）＋横へすべる
+    ulvDodge: {
+      duration: 520,
+      offsetX: { amount: 24, outRatio: 0.3 },
+      poses: [
+        { at: 0, pose: "dodge0" },
+        { at: 0.134, pose: "dodge1" },
+        { at: 0.307, pose: "dodge2" },
+        { at: 0.481, pose: "dodge3" },
+        { at: 0.712, pose: null }
+      ]
+    },
+    // レベルアップ・スカウトに応じたとき：共鳴の動きを速めに流す（ザンガルドと同じ）
+    ulvCheer: {
+      duration: 600,
+      scaleY:  { amount: 0.04,   shape: "pulse" },
+      scaleX:  { amount: 0.02,   shape: "pulse" },
+      rotate:  { amount: -0.008, shape: "pulse" },
+      poses: [
+        { at: 0, pose: "magic0" },
+        { at: 0.17, pose: "magic1" },
+        { at: 0.319, pose: "magic2" },
+        { at: 0.468, pose: "magic3" },
+        { at: 0.681, pose: "magic4" }
+      ]
+    },
+    // 眠り：atlas の sleep 1枚
+    ulvSleeping: {
+      pose: "sleep",
+      scaleY: { offset: -0.01, amplitude: 0.01, period: 4600 }
+    },
+
     /**
      * --- シニガミ（蔦這う回廊の初見殺し。2026-10-21） ---
      * 姿は sprites_marsh.js の shinigami（ふつう）・shinigamiRaise（振りかぶる）・shinigamiSwing（振り下ろす）。

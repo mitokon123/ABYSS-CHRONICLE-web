@@ -42,7 +42,10 @@
   Panel.prototype.drawText = function (str, x, y, opts) {
     opts = opts || {};
     var t = this.theme;
-    this.ctx.fillStyle = opts.color || t.textColor || "#ffffff";
+    var color = opts.color || t.textColor || "#ffffff";
+    // 指で遊んでいるときは、うすい色の文字を明るくする（v1.8.0。data/ui.js の theme.touchColors）
+    if (t.touchColors && t.touchColors[color] && NS.isTouchMode && NS.isTouchMode()) color = t.touchColors[color];
+    this.ctx.fillStyle = color;
     this.ctx.font = opts.font || t.font || "14px monospace";
     this.ctx.textAlign = opts.align || "left";
     this.ctx.fillText(str, x, y);

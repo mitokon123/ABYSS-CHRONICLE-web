@@ -31,6 +31,18 @@
      *   duration … 演出全体の長さ（ms）。暗くする＋明るく戻す
      *   outRatio … そのうち「暗くする」に使う割合。省略で 0.5（行き帰り同じ）
      */
+    /**
+     * 指で遊んでいるときの文字（v1.8.0。作者の指定「スマホ版は小さい文字を大きく太く」）。
+     *   bold  … 文字をすべて太字にする
+     *   sizes … この大きさ(px)の文字は、右の大きさにする（並びが崩れない範囲）。
+     *           10・11px は HP の棒の横など詰めて並べた所なので、太字だけにして大きさは変えない
+     * キー・マウスで遊んでいるときは変えない。仕組みは js/core/Game.js の applyTouchText
+     */
+    touchText: {
+      bold: true,
+      sizes: { "12": 13, "13": 14 }
+    },
+
     transition: {
       duration: 130,
       color: "#04060c",
@@ -84,6 +96,11 @@
       //   消えるほうを長くすると、読み終わってからそっと消える感じになる
       notice: { fadeIn: 140, fadeOut: 340 },
       font: "14px monospace",
+      // 指で遊んでいるときの選択肢（はい・いいえ、拠点や戦闘のコマンドなど。CommandMenu）の文字（v1.8.0）
+      touchMenuFont: "16px monospace",
+      // 指で遊んでいるときは、うすい色の文字を明るくする（v1.8.0。Panel.drawText で描く文字だけ）。
+      // 左がふだんの色（subTextColor・hintColor）、右が指のときの色
+      touchColors: { "#9aa4c0": "#c6cde2", "#5b6688": "#8d98ba" },
       smallFont: "12px monospace",
       largeFont: "16px monospace",
       lineHeight: 18,
@@ -231,6 +248,20 @@
       volumeBox: { x: 180, y: 292, w: 440, rowHeight: 36, labelWidth: 120, barWidth: 140, barHeight: 8,
                    faintArrowAlpha: 0.35, background: "#0d1220", closeButton: { w: 96, h: 26 } },
 
+      /**
+       * 更新のお知らせ（v1.8.0）。画面の真ん中に出し、高さは主な内容の行数で決まる。
+       *   charsPerLine … 主な内容を折り返す文字数　maxLines … 主な内容の行の上限　maxPickup … 何件まで出すか
+       *   headHeight … 見出しから「主な内容」まで　footHeight … 案内の行とボタンのぶん　lift … 真ん中より上へずらす
+       */
+      updateBox: { w: 540, padding: 18, lineHeight: 22, charsPerLine: 34, maxLines: 9, maxPickup: 3,
+                   headHeight: 96, footHeight: 100, lift: 16, background: "#0d1220",
+                   headingFont: "18px monospace", pickupColor: "#7fd0ff",
+                   buttons: { w: 176, h: 30, gap: 18 } },
+      /** パッチノートを初めて開くときの確かめ（v1.8.0）。高さは文の行数で決まる */
+      spoilerBox: { w: 460, padding: 18, lineHeight: 22, headHeight: 58, footHeight: 64, lift: 16,
+                    background: "#0d1220", headingFont: "18px monospace",
+                    buttons: { w: 120, h: 30, gap: 28 } },
+
       notice: { x: 400, y: 464 },
       // 操作案内。左下のクレジット（4行）と行がぶつからないよう、その上に置く
       hint: { x: 400, y: 522 },
@@ -269,10 +300,11 @@
       //   ターンの演出が終わったときに、出ている札がまとめて fadeOut ミリ秒で薄れて消える（BattleScene._dismissEffectPopups）。
       //   ただし出てから minShow ミリ秒たつまでは消さない（v1.2.1）
       //   maxLife は消し忘れの保険。max 枚を超えたら古い札から消す
-      //   ★ 3枚で横幅 630px（画面は800px）。v1.0.0 で 320 → 270 に狭めた（作者の指定）
+      //   ★ v1.0.0 で 320 → 270 に狭め、v1.8.0 で 360 に広げた（札が「再生：HP自動回復」の形になったため。作者が案Cを選んだ）。
+      //     3枚では画面（800px）を越えるので、越えるぶんだけ重ねを深くする（margin … 画面の左右に空ける量）
       //   colors … 左端の色帯と文字の色。buff 強化／debuff 弱体／ability 特性／blessing 加護／equipment 装備
       effectPopup: {
-        y: 6, w: 270, h: 24, max: 3, overlap: 1 / 3, textX: 118,
+        y: 6, w: 360, h: 24, max: 3, overlap: 1 / 3, textX: 110, margin: 8,
         // chainDelay … 1つの出来事から何枚も出るとき（王の号令の攻撃力上昇・防御力上昇）、2枚目以降を遅らせる量
         // slideIn は 80 → 180（作者の指定。0.08秒では速すぎた）
         slideIn: 180, fadeOut: 140, maxLife: 8000, chainDelay: 70,
@@ -496,6 +528,23 @@
                          list: [ [34, 532], [128, 548], [236, 526], [330, 560], [790, 540] ] }
             }
           }
+        },
+        // 涵養の穴のほとり（v1.8.0・第三章。場面19「涵養の穴へ」を見たあと）。私の案（作者の見て待ち）。
+        // 濡れた青い岩の地面・水をたたえた穴（ふちに水面の光）・ふちの短い苔・ときどき落ちる雫
+        kanyou: {
+          gradientTop: "#0b1824",
+          gradientBottom: "#03070c",
+          // 落ちる雫（speed が正なので下へ落ちる）
+          particles: { count: 26, color: "#8ad8ee", minSize: 1, maxSize: 2, minSpeed: 40, maxSpeed: 90,
+                       minAlpha: 0.2, maxAlpha: 0.55 },
+          scenery: {
+            ground: { y: 498, color: "#08121a", edgeColor: "#2a4a5e" },
+            hole:   { cx: 400, cy: 700, rx: 340, ry: 114, color: "#04121e", rimColor: "#4fa8c8", rimWidth: 2,
+                      mossColor: "#2c6a6a" },
+            plants: {
+              tufts: { color: "#16353a", tip: "#2c6a6a", count: 26, height: 7, skipFrom: 650, skipTo: 730 }
+            }
+          }
         }
       },
 
@@ -676,6 +725,14 @@
                      // 蛍（ゆっくり昇って消える緑の光）
                      fireflies: { count: 22, color: "#b8e07a", top: 120, bottom: 380, minSize: 1, maxSize: 2.5,
                                   speed: 0.006, alpha: 0.75 } },
+        // 涵養の穴のほとりの野営地（v1.8.0・第三章）。拠点の場所 kanyou（home.places.kanyou）の景色で描く。
+        //   霧の粒（fireflies と同じ昇る光）を淡い水色で
+        kanyouCamp: { kind: "camp", place: "kanyou", shiftY: -130,
+                      stars: { count: 40, color: "#c8e4f0", top: 0, bottom: 300, minSize: 1, maxSize: 2, alpha: 0.5 },
+                      particles: { count: 16, color: "#ffb060", top: 250, bottom: 400, left: 650, right: 730,
+                                   minSize: 1, maxSize: 2.5, speed: 0.03, alpha: 0.9 },
+                      fireflies: { count: 18, color: "#9fd8ea", top: 140, bottom: 400, minSize: 1, maxSize: 2,
+                                   speed: 0.004, alpha: 0.45 } },
         // 星の夜空（試験を終えた夜）
         night:   { kind: "stars", top: "#02030a", bottom: "#0e1630",
                    stars: { count: 140, color: "#e6ecff", top: 0, bottom: 470, minSize: 1, maxSize: 2.2, alpha: 0.9 },
@@ -705,7 +762,10 @@
         ivy:     { kind: "cave", theme: "ivy", depthAlpha: 0.75, top: "#0a160c", bottom: "#18200f",
                    particles: { count: 30, color: "#7fcf56", speed: 0.008, alpha: 0.55, minSize: 1, maxSize: 2.2 } },
         rootdeep: { kind: "cave", theme: "rootdeep", top: "#170d05", bottom: "#33200c",
-                   particles: { count: 40, color: "#f0c45a", speed: 0.01, alpha: 0.75, minSize: 1, maxSize: 2.8 } }
+                   particles: { count: 40, color: "#f0c45a", speed: 0.01, alpha: 0.75, minSize: 1, maxSize: 2.8 } },
+        // 滴る鍾乳洞の中（v1.8.0）。青白い石灰と、漂う水の粒
+        drip:    { kind: "cave", theme: "drip", depthAlpha: 0.7, top: "#081420", bottom: "#142a36",
+                   particles: { count: 34, color: "#a0e4f4", speed: 0.008, alpha: 0.5, minSize: 1, maxSize: 2.2 } }
       },
       dialogue: {
         box: { x: 40, y: 420, w: 720, h: 130 },

@@ -189,6 +189,7 @@
     var hpRatio = this.currentHp / Math.max(1, this.getMaxHp());
     this.encounterEffects = [];
     this.fixedStatLevel = undefined;
+    this.ignoreNatureStats = false;
     this.actionPattern = null;
     this.patternIndex = 0;
     this.skillRateOverride = undefined;
@@ -200,6 +201,7 @@
     this.rewardMultiplier = undefined;
     this.dropsOverride = undefined;
     this._bossImmuneToStatus = [];
+    this._bossStatusResist = null;
     this._debuffResistOverride = null;
     if (this._species) this.skills = NS.MonsterData.skillsUpToLevel(this._species, this.level);
     this._keepBookSkills();
@@ -413,10 +415,13 @@
 
     var mod = {
       id: skill.id,
-      name: skill.name,
+      // 弱体の名前（印と「切れた」の文に出る）。ふつうは技の名前。焦熱・裂傷のように別の名前を書いた技はそれ（v1.8.0）
+      name: spec.name || skill.name,
       effects: spec.effects,
       remaining: spec.duration || 1
     };
+    // 切れたときの文（焦熱が おさまった。v1.8.0）。書かなければ「効果が切れた」
+    if (spec.endMessage) mod.endMessage = spec.endMessage;
     // 重ならない強化の組（鼓舞の舞とハウリング。v1.5.0。EffectSystem.collectEffects）
     if (spec.exclusive) mod.exclusive = spec.exclusive;
     this.modifiers.push(mod);
@@ -452,6 +457,8 @@
   /** 掛かっている効果をすべて外す（戦闘が終わったとき） */
   MonsterInstance.prototype.clearModifiers = function () {
     this.modifiers = [];
+    // 育つ石で育った分も、その戦闘かぎり（v1.8.0）
+    this._grownStats = null;
   };
 
   // --- 状態異常（定義は data/statuses.js） ---
@@ -612,6 +619,9 @@
   MonsterInstance.prototype.getStatusResist = function (statusId) {
     var resists = (this._species && this._species.statusResist) || {};
     var value = resists[statusId];
+    // 主として出ているあいだは、主ごとの値（data/bosses.js の statusResist）が種族の値の代わりになる（v1.8.0）
+    var bossResist = this._bossStatusResist;
+    if (bossResist && typeof bossResist[statusId] === "number") value = bossResist[statusId];
     var base = (value === undefined) ? 0 : value;
 
     // 装備などで耐性そのものを底上げできる（毒よけの護符など）。
@@ -631,6 +641,15 @@
    */
   MonsterInstance.prototype.setBossStatusImmunity = function (list) {
     this._bossImmuneToStatus = list || [];
+  };
+
+  /**
+   * 主として出ているあいだだけの状態異常の耐性（v1.8.0。作者の表 主の状態異常耐性_案.md 2026-11-27）。
+   * { poison: 9, sleep: 0, … }。書いた状態異常だけ、種族の statusResist の代わりになる（装備の足し算はそのまま）。
+   * 仲間にすると外れる（leaveEncounter。主は作り直すのでもともと付いてこない）
+   */
+  MonsterInstance.prototype.setBossStatusResist = function (resists) {
+    this._bossStatusResist = resists || null;
   };
 
   /**
@@ -794,7 +813,13 @@
    */
   MonsterInstance.prototype.getEvasion = function () {
     var value = this._species && this._species.evasion;
-    return (typeof value === "number") ? Math.max(0, Math.min(1, value)) : 0;
+    value = (typeof value === "number") ? value : 0;
+    // 陽炎の舞などの回避の強化（evasionBonus。v1.8.0）は足し算。加護「陽炎の外套」（runEffects）も同じ
+    if ((this.modifiers && this.modifiers.length > 0) || (this.runEffects && this.runEffects.length > 0)) {
+      var effects = this._getEffects();
+      if (effects && effects.getEvasionBonus) value += effects.getEvasionBonus(this);
+    }
+    return Math.max(0, Math.min(1, value));
   };
 
   /**
@@ -1008,12 +1033,14 @@
    *   伸びた量       … getGrowthProgress（段階が無ければ (Lv-1) × 成長率）
    *   効果倍率／効果加算 … 特性と装備（EffectSystem がまとめて集計する）
    * fixedStatLevel があるあいだは、そのレベルの表の値に固定する（性格補正と個体値も入れない）
+   * ignoreNatureStats（主として出ているあいだ。v1.8.0 作者 2026-11-27「主だけ性格のステータス補正なし（性格はランダムのまま）」）は
+   *   性格補正だけ掛けない。個体値は足す。仲間にすると外れる（leaveEncounter）
    */
   MonsterInstance.prototype._calcStat = function (baseKey, ivKey, natureKey) {
     if (!this._species) return 1;
     var fixed = !!this.fixedStatLevel;
     var progress = this.getGrowthProgress(ivKey);
-    var nature = fixed ? null : this.getNature();
+    var nature = (fixed || this.ignoreNatureStats) ? null : this.getNature();
     var natureMul = nature ? (nature[natureKey] || 1) : 1;
     var effectMul = this.getEffectStatMultiplier(ivKey);
 
@@ -1132,6 +1159,12 @@
   MonsterInstance.prototype.heal = function (amount) {
     // 亡者の魂で踏みとどまっている者は、回復を受け付けない（そのターンの終わりに倒れる）
     if (this._undying) return this.currentHp;
+    // 焦熱（受ける回復の倍率。v1.8.0）。回復の技・再生・吸収・持ち物のどれも、ここを通るので半分になる
+    if (amount > 0 && this.modifiers && this.modifiers.length > 0) {
+      var effects = this._getEffects();
+      var rate = (effects && effects.getHealReceivedMultiplier) ? effects.getHealReceivedMultiplier(this) : 1;
+      if (rate !== 1) amount = Math.max(1, Math.floor(amount * rate));
+    }
     this.currentHp = Math.min(this.getMaxHp(), this.currentHp + amount);
     return this.currentHp;
   };

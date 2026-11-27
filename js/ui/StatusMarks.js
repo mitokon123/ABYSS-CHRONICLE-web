@@ -157,6 +157,12 @@
       // 毎ターンの回復（樹液の膜。2026-11-11）
       if (e.type === "regenOverTime")  return { stat: "hp", up: true };
       if (e.type === "ppRegen")        return { stat: "pp", up: true };
+      // 焦熱（受ける回復が半分）・裂傷（毎ターンのダメージ）・陽炎の舞（回避）。v1.8.0
+      if (e.type === "healReceived")   return { stat: "hp", up: false };
+      if (e.type === "slipDamage")     return { stat: "hp", up: false };
+      if (e.type === "evasionBonus")   return { stat: "other", up: e.value > 0 };
+      // 反射（リフレクト・リバーサル。v1.8.0）
+      if (e.type === "reflect")        return { stat: "other", up: true };
     }
     return { stat: null, up: false };
   };

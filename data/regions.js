@@ -17,6 +17,9 @@
  *              { region: "cradle", count: 4 } … 揺籃の穴の区画を4つクリアしたら
  * battleBgm  : この穴のふつうの戦闘曲（data/audio.js の bgm のid）。書かなければ battle。
  *              主との戦いは今までどおり boss（または data/bosses.js の bgm）
+ * chestCommon: 宝箱の「どこでも出る中身」（data/features.js の chest）を、この穴では別の品に置き換える
+ *              { もとの品: 置き換える品 }。重みと個数はそのまま。書かなければ置き換えない（v1.8.0。作者 2026-11-27
+ *              「やくそう、精気の実、回復薬は場所によって、それより強いアイテムに置き換わるように」。作者の表 宝箱と工房の道具_案.md）
  *
  * ★ 穴を増やすときは、ここに1つ足して、dungeons.js の region をそのidにする。
  *   区画（ダンジョン）が1つも無い穴は、開いていても「準備中」と出て入れない。
@@ -51,7 +54,27 @@
       theme: "houga",
       // ふつうの戦闘曲（作者の指定 2026-10-09。主との戦いは揺籃と同じ boss）
       battleBgm: "hougaBattle",
+      // 宝箱の共通の中身：薬草 → 回復薬・回復薬 → 深淵の雫（精気の実はそのまま）
+      chestCommon: { herb: "potion", potion: "elixir" },
       unlockedBy: { region: "cradle", count: 4 }
+    },
+
+    /**
+     * 3つ目の穴（v1.8.0。作者の決定 2026-11-24）。水の穴。区画は 滴る鍾乳洞 → 沈んだ水路 → 蒼き地底湖。
+     * 開くのはクロニクル杯の予選を勝ち抜いたあと（作者 2026-11-27）。見た目は作者に任された（theme drip）。
+     * 一言は私の案（作者の見ての返事待ち）
+     */
+    kanyou: {
+      id: "kanyou",
+      name: "涵養の穴",
+      order: 3,
+      subtitle: "地の水が育む、静かな穴。",
+      theme: "drip",
+      // ふつうの戦闘曲（作者が足した曲 2026-11-27。主との戦いは今までどおり boss）
+      battleBgm: "kanyouBattle",
+      // 宝箱の共通の中身：薬草 → 深淵の雫・精気の実 → 大精気の実・回復薬 → 千年樹の蜜
+      chestCommon: { herb: "elixir", spiritBerry: "greatSpiritBerry", potion: "ancientHoney" },
+      unlockedBy: { event: "chronicleQualifier", eventName: "クロニクル杯の予選" }
     }
   };
 })(window.MyGame);

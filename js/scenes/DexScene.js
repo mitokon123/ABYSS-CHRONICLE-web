@@ -1393,7 +1393,8 @@
       var maxLevel = monster.maxLevel || growth.defaultMaxLevel || 50;
       if (growth.levelCap) maxLevel = Math.min(maxLevel, growth.levelCap);
       this.panel.drawText(
-        (texts.scoutLabel || "") + " " + Math.round((monster.scoutRate || 0) * 100) + "%   " +
+        // 主の 2.5% のように端数がある値は小数1桁まで出す（v1.8.0。四捨五入で 3% と出ていた）
+        (texts.scoutLabel || "") + " " + (Math.round((monster.scoutRate || 0) * 1000) / 10) + "%   " +
         (texts.maxLevelShort || "") + " " + maxLevel,
         rx, g.y + 222, { font: t.smallFont, color: t.subTextColor });
     }
